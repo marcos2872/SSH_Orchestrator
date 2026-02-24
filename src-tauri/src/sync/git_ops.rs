@@ -60,6 +60,7 @@ impl GitSyncService {
         // Fast-forward merge strategy for simplicity in this MVP
         let _config = repo.config()?;
         let mut checkout_builder = git2::build::CheckoutBuilder::new();
+        checkout_builder.force();
 
         let (merge_analysis, _) = repo.merge_analysis(&[&fetch_commit])?;
 
@@ -129,7 +130,7 @@ impl GitSyncService {
         push_options.remote_callbacks(callbacks);
 
         remote.push(
-            &["refs/heads/main:refs/heads/main"],
+            &["+refs/heads/main:refs/heads/main"],
             Some(&mut push_options),
         )?;
 

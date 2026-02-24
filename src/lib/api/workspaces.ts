@@ -23,6 +23,10 @@ export const deleteWorkspace = async (id: string): Promise<void> => {
     return invoke<void>('delete_workspace', { id });
 };
 
-export const syncWorkspace = async (workspaceId: string): Promise<void> => {
-    return invoke<void>('sync_workspace', { workspaceId });
+export const pullWorkspace = async (workspaceId: string): Promise<void> => {
+    return invoke<void>('pull_workspace', { workspaceId });
+};
+
+export const pushWorkspace = async (workspaceId: string): Promise<void> => {
+    return invoke<void>('push_workspace', { workspaceId });
 };

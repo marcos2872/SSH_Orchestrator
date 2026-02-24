@@ -52,28 +52,22 @@ pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Ve
         });
     }
 
-    // Compare with remote and store the winner
+    // Unconditionally apply remote state
     for remote in remote_workspaces {
-        if let Some(local) = local_map.get(&remote.id) {
-            // Compare HLC directly as string (lexicographically matches timestamp)
-            if remote.hlc > local.hlc {
-                let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
-                // Remote wins, update local DB
-                sqlx::query("UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, hlc = ?, deleted = ? WHERE id = ?")
-                    .bind(&remote.name)
-                    .bind(&remote.color)
-                    .bind(remote.sync_enabled)
-                    .bind(&remote.hlc)
-                    .bind(remote.deleted)
-                    .bind(&remote_id)
-                    .execute(&state.db.pool)
-                    .await?;
-                
-                resolved_workspaces.push(remote.clone());
-            } else {
-                // Local wins or equal, keep local
-                resolved_workspaces.push(local.clone());
-            }
+        if let Some(_) = local_map.get(&remote.id) {
+            let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
+            // Remote wins unconditionally on pull
+            sqlx::query("UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, hlc = ?, deleted = ? WHERE id = ?")
+                .bind(&remote.name)
+                .bind(&remote.color)
+                .bind(remote.sync_enabled)
+                .bind(&remote.hlc)
+                .bind(remote.deleted)
+                .bind(&remote_id)
+                .execute(&state.db.pool)
+                .await?;
+            
+            resolved_workspaces.push(remote.clone());
             local_map.remove(&remote.id);
         } else {
             let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
@@ -94,9 +88,11 @@ pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Ve
         }
     }
     
-    // Whatever is left in local_map is from local and doesn't exist in remote yet
-    for (_, local) in local_map {
-        resolved_workspaces.push(local);
+    // Whatever is left in local_map is from local and doesn't exist in remote.
+    // Since this is a manual Pull (overwrite local with remote), we should delete them from the local DB.
+    for (id_str, _) in local_map {
+        let id_uuid = Uuid::parse_str(&id_str).unwrap_or_default();
+        sqlx::query("DELETE FROM workspaces WHERE id = ?").bind(&id_uuid).execute(&state.db.pool).await?;
     }
     
     Ok(resolved_workspaces)
@@ -132,26 +128,22 @@ pub async fn merge_servers(state: &State<'_, AppState>, remote_servers: Vec<CRDT
     }
 
     for remote in remote_servers {
-        if let Some(local) = local_map.get(&remote.id) {
-            if remote.hlc > local.hlc {
-                let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
-                // Remote wins
-                sqlx::query("UPDATE servers SET name = ?, host = ?, port = ?, username = ?, tags = ?, password_enc = ?, hlc = ?, deleted = ? WHERE id = ?")
-                    .bind(&remote.name)
-                    .bind(&remote.host)
-                    .bind(remote.port)
-                    .bind(&remote.username)
-                    .bind(&remote.tags)
-                    .bind(&remote.password_enc)
-                    .bind(&remote.hlc)
-                    .bind(remote.deleted)
-                    .bind(&remote_id)
-                    .execute(&state.db.pool)
-                    .await?;
-                resolved_servers.push(remote.clone());
-            } else {
-                resolved_servers.push(local.clone());
-            }
+        if let Some(_) = local_map.get(&remote.id) {
+            let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
+            // Remote wins unconditionally on pull
+            sqlx::query("UPDATE servers SET name = ?, host = ?, port = ?, username = ?, tags = ?, password_enc = ?, hlc = ?, deleted = ? WHERE id = ?")
+                .bind(&remote.name)
+                .bind(&remote.host)
+                .bind(remote.port)
+                .bind(&remote.username)
+                .bind(&remote.tags)
+                .bind(&remote.password_enc)
+                .bind(&remote.hlc)
+                .bind(remote.deleted)
+                .bind(&remote_id)
+                .execute(&state.db.pool)
+                .await?;
+            resolved_servers.push(remote.clone());
             local_map.remove(&remote.id);
         } else {
             let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
@@ -174,8 +166,9 @@ pub async fn merge_servers(state: &State<'_, AppState>, remote_servers: Vec<CRDT
         }
     }
     
-    for (_, local) in local_map {
-        resolved_servers.push(local);
+    for (id_str, _) in local_map {
+        let id_uuid = Uuid::parse_str(&id_str).unwrap_or_default();
+        sqlx::query("DELETE FROM servers WHERE id = ?").bind(&id_uuid).execute(&state.db.pool).await?;
     }
     
     Ok(resolved_servers)

@@ -63,7 +63,8 @@ pub fn run() {
             handlers::auth::github_login,
             handlers::auth::get_current_user,
             handlers::auth::github_logout,
-            sync::sync_workspace,
+            sync::pull_workspace,
+            sync::push_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
