@@ -14,6 +14,10 @@ pub async fn sync_workspace(
     state: State<'_, AppState>,
     _workspace_id: String,
 ) -> Result<(), String> {
+    
+    // 0. Prevent concurrent syncs (avoid git folder locks and db races)
+    let _lock = state.sync_lock.try_lock().map_err(|_| "Sincronização já em andamento")?;
+
     // 1. Get the GitHub Token
     let token = {
         let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

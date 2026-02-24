@@ -7,6 +7,7 @@ pub struct AppState {
     pub db: DbService,
     pub ssh: SshService,
     pub crypto: CryptoService,
+    pub sync_lock: tokio::sync::Mutex<()>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -34,6 +35,7 @@ pub fn run() {
                     db,
                     ssh: SshService::new(),
                     crypto,
+                    sync_lock: tokio::sync::Mutex::new(()),
                 });
             });
             Ok(())
