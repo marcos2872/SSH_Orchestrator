@@ -12,6 +12,12 @@ Sempre que desejar lançar uma nova versão, crie uma tag seguindo o padrão sem
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
+
+
+git tag -d v0.1.0        # Deleta local
+git push origin :v0.1.0  # Deleta no GitHub
+git tag v0.1.0           # Cria de novo com o código novo
+git push origin v0.1.0   # Envia a tag nova
 ```
 
 ### **2. Acompanhar o Build**
