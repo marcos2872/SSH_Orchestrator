@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createServer, updateServer, Server } from '../../lib/api/servers';
-import { X, Eye, EyeOff, Server as ServerIcon, Lock } from 'lucide-react';
+import { Eye, EyeOff, Server as ServerIcon, Lock } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
+import Modal from '../Modal';
 
 interface Props {
     workspaceId: string;
@@ -69,156 +70,144 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-[460px] shadow-2xl">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-500/10 rounded-lg">
-                            <ServerIcon className="w-5 h-5 text-blue-400" />
-                        </div>
-                        <h2 className="text-lg font-semibold">
-                            {isEdit ? 'Editar Servidor' : 'Novo Servidor'}
-                        </h2>
-                    </div>
-                    <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
+        <Modal
+            isOpen={true}
+            onClose={onClose}
+            title={isEdit ? 'Editar Servidor' : 'Novo Servidor'}
+            icon={<ServerIcon className="w-5 h-5 text-blue-400" />}
+        >
+            <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Name */}
+                <Field label="Nome *">
+                    <input
+                        ref={firstRef}
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="Servidor de Produção"
+                        required
+                        className={inputCls}
+                    />
+                </Field>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Name */}
-                    <Field label="Nome *">
-                        <input
-                            ref={firstRef}
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            placeholder="Servidor de Produção"
-                            required
-                            className={inputCls}
-                        />
-                    </Field>
-
-                    {/* Host + Port side by side */}
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="col-span-2">
-                            <Field label="Host / IP *">
-                                <input
-                                    value={host}
-                                    onChange={e => setHost(e.target.value)}
-                                    placeholder="192.168.1.1 ou my.server.com"
-                                    required
-                                    className={inputCls}
-                                />
-                            </Field>
-                        </div>
-                        <Field label="Porta *">
+                {/* Host + Port side by side */}
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2">
+                        <Field label="Host / IP *">
                             <input
-                                type="number"
-                                value={port}
-                                onChange={e => setPort(Number(e.target.value))}
-                                min={1}
-                                max={65535}
+                                value={host}
+                                onChange={e => setHost(e.target.value)}
+                                placeholder="192.168.1.1 ou my.server.com"
                                 required
                                 className={inputCls}
                             />
                         </Field>
                     </div>
-
-                    {/* Username */}
-                    <Field label="Usuário *">
+                    <Field label="Porta *">
                         <input
-                            value={username}
-                            onChange={e => setUsername(e.target.value)}
-                            placeholder="root"
+                            type="number"
+                            value={port}
+                            onChange={e => setPort(Number(e.target.value))}
+                            min={1}
+                            max={65535}
                             required
                             className={inputCls}
                         />
                     </Field>
+                </div>
 
-                    {/* Divider */}
-                    <div className="border-t border-slate-800 pt-4">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Lock className="w-4 h-4 text-slate-500" />
-                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                                Credenciais SSH
-                            </span>
+                {/* Username */}
+                <Field label="Usuário *">
+                    <input
+                        value={username}
+                        onChange={e => setUsername(e.target.value)}
+                        placeholder="root"
+                        required
+                        className={inputCls}
+                    />
+                </Field>
+
+                {/* Divider */}
+                <div className="border-t border-slate-800 pt-4">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Lock className="w-4 h-4 text-slate-500" />
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                            Credenciais SSH
+                        </span>
+                    </div>
+
+                    {/* Password field */}
+                    <Field label={isEdit && server?.has_saved_password ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha'}>
+                        <div className="relative">
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                placeholder={
+                                    isEdit && server?.has_saved_password
+                                        ? '••••••••  (salva)'
+                                        : '••••••••'
+                                }
+                                className={`${inputCls} pr-10`}
+                                autoComplete="new-password"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(v => !v)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                                tabIndex={-1}
+                            >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
                         </div>
+                    </Field>
 
-                        {/* Password field */}
-                        <Field label={isEdit && server?.has_saved_password ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha'}>
-                            <div className="relative">
-                                <input
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    placeholder={
-                                        isEdit && server?.has_saved_password
-                                            ? '••••••••  (salva)'
-                                            : '••••••••'
-                                    }
-                                    className={`${inputCls} pr-10`}
-                                    autoComplete="new-password"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(v => !v)}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                                    tabIndex={-1}
-                                >
-                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </Field>
-
-                        {/* Save password toggle */}
-                        <label className="flex items-start gap-3 mt-3 cursor-pointer group">
-                            <div className="relative mt-0.5">
-                                <input
-                                    type="checkbox"
-                                    checked={savePassword}
-                                    onChange={e => setSavePassword(e.target.checked)}
-                                    className="sr-only"
-                                />
+                    {/* Save password toggle */}
+                    <label className="flex items-start gap-3 mt-3 cursor-pointer group">
+                        <div className="relative mt-0.5">
+                            <input
+                                type="checkbox"
+                                checked={savePassword}
+                                onChange={e => setSavePassword(e.target.checked)}
+                                className="sr-only"
+                            />
+                            <div
+                                className={`w-10 h-5 rounded-full transition-colors ${savePassword ? 'bg-blue-600' : 'bg-slate-700'}`}
+                            >
                                 <div
-                                    className={`w-10 h-5 rounded-full transition-colors ${savePassword ? 'bg-blue-600' : 'bg-slate-700'}`}
-                                >
-                                    <div
-                                        className={`w-4 h-4 bg-white rounded-full shadow absolute top-0.5 transition-transform ${savePassword ? 'translate-x-5' : 'translate-x-0.5'}`}
-                                    />
-                                </div>
+                                    className={`w-4 h-4 bg-white rounded-full shadow absolute top-0.5 transition-transform ${savePassword ? 'translate-x-5' : 'translate-x-0.5'}`}
+                                />
                             </div>
-                            <div>
-                                <p className="text-sm font-medium group-hover:text-white transition-colors">
-                                    Salvar senha encriptada
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    AES-256-GCM · Armazenada localmente · Nunca transmitida
-                                </p>
-                            </div>
-                        </label>
-                    </div>
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium group-hover:text-white transition-colors">
+                                Salvar senha encriptada
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                AES-256-GCM · Armazenada localmente · Nunca transmitida
+                            </p>
+                        </div>
+                    </label>
+                </div>
 
-                    {/* Actions */}
-                    <div className="flex gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={saving || !name.trim() || !host.trim() || !username.trim()}
-                            className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-semibold rounded-lg transition-colors"
-                        >
-                            {saving ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Criar servidor'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={saving || !name.trim() || !host.trim() || !username.trim()}
+                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-semibold rounded-lg transition-colors"
+                    >
+                        {saving ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Criar servidor'}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     );
 };
 

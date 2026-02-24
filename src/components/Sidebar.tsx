@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Workspace, getWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace } from '../lib/api/workspaces';
 import { Plus, Server, Folder, Activity, MoreHorizontal, Pencil, Trash2, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
+import Modal from './Modal';
 
 interface Props {
     onSelectWorkspace: (ws: Workspace | null) => void;
@@ -266,39 +267,39 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
             </div>
 
             {/* Settings modal */}
-            {showSettings && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-96 shadow-2xl">
-                        <h2 className="text-lg font-semibold mb-2">Configurações</h2>
-                        <p className="text-sm text-slate-400 mb-6">
-                            Configurações avançadas (Master Password, GitHub Sync) estarão disponíveis nas Phases 0.2 e 0.3. 🔐
-                        </p>
-                        <button onClick={() => setShowSettings(false)} className="w-full py-2 bg-primary hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors">
-                            Fechar
-                        </button>
-                    </div>
-                </div>
-            )}
+            <Modal
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+                title="Configurações"
+                width="w-96"
+            >
+                <p className="text-sm text-slate-400 mb-6">
+                    Configurações avançadas (Master Password, GitHub Sync) estarão disponíveis nas Phases 0.2 e 0.3. 🔐
+                </p>
+                <button onClick={() => setShowSettings(false)} className="w-full py-2 bg-primary hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors">
+                    Fechar
+                </button>
+            </Modal>
 
             {/* Delete confirmation modal */}
-            {confirmDeleteId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-96 shadow-2xl">
-                        <h2 className="text-lg font-semibold mb-2 text-red-400">Excluir workspace?</h2>
-                        <p className="text-sm text-slate-400 mb-6">
-                            Esta ação irá excluir o workspace e <strong className="text-white">todos os servidores</strong> associados. Não pode ser desfeita.
-                        </p>
-                        <div className="flex gap-3">
-                            <button onClick={() => { setConfirmDeleteId(null); setMenuOpenId(null); }} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">
-                                Cancelar
-                            </button>
-                            <button onClick={() => handleDeleteWorkspace(confirmDeleteId)} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold rounded-lg transition-colors">
-                                Excluir
-                            </button>
-                        </div>
-                    </div>
+            <Modal
+                isOpen={!!confirmDeleteId}
+                onClose={() => { setConfirmDeleteId(null); setMenuOpenId(null); }}
+                title="Excluir workspace?"
+                width="w-96"
+            >
+                <p className="text-sm text-slate-400 mb-6">
+                    Esta ação irá excluir o workspace e <strong className="text-white">todos os servidores</strong> associados. Não pode ser desfeita.
+                </p>
+                <div className="flex gap-3">
+                    <button onClick={() => { setConfirmDeleteId(null); setMenuOpenId(null); }} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">
+                        Cancelar
+                    </button>
+                    <button onClick={() => confirmDeleteId && handleDeleteWorkspace(confirmDeleteId)} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold rounded-lg transition-colors text-white">
+                        Excluir
+                    </button>
                 </div>
-            )}
+            </Modal>
 
             {menuOpenId && <div className="fixed inset-0 z-40" onClick={() => setMenuOpenId(null)} />}
         </>

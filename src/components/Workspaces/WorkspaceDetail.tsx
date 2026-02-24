@@ -3,10 +3,11 @@ import { updateWorkspace, deleteWorkspace } from '../../lib/api/workspaces';
 import { Server, getServers, deleteServer } from '../../lib/api/servers';
 import {
     Monitor, Plus, Settings, Shield, Terminal as TerminalIcon,
-    HardDrive, X, Trash2, Save, Pencil, Lock
+    HardDrive, Trash2, Save, Pencil, Lock
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import AddServerModal from '../Servers/AddServerModal';
+import Modal from '../Modal';
 
 interface Props {
     workspace: { id: string; name: string; color: string };
@@ -217,91 +218,88 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
             )}
 
             {/* ── Workspace Settings Modal ── */}
-            {showSettings && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-[420px] shadow-2xl">
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-semibold">Configurações do Workspace</h2>
-                            <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
-                        </div>
-                        {!confirmDeleteWs ? (
-                            <>
-                                <div className="space-y-4 mb-6">
-                                    <div>
-                                        <label className="block text-xs text-slate-500 mb-1">Nome do Workspace</label>
-                                        <input
-                                            value={wsName}
-                                            onChange={e => setWsName(e.target.value)}
-                                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            <Modal
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+                title="Configurações do Workspace"
+                width="w-[420px]"
+            >
+                {!confirmDeleteWs ? (
+                    <>
+                        <div className="space-y-4 mb-6">
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Nome do Workspace</label>
+                                <input
+                                    value={wsName}
+                                    onChange={e => setWsName(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <label className="block text-xs text-slate-500">Sincronizar no GitHub (Smart Sync)</label>
+                                <button
+                                    type="button"
+                                    onClick={() => setWsSyncEnabled(!wsSyncEnabled)}
+                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-75 ${wsSyncEnabled ? 'bg-primary' : 'bg-slate-700'}`}
+                                    role="switch"
+                                    aria-checked={wsSyncEnabled}
+                                >
+                                    <span className="sr-only">Usar configuração de Sincronização</span>
+                                    <span
+                                        aria-hidden="true"
+                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${wsSyncEnabled ? 'translate-x-4' : 'translate-x-0'}`}
+                                    />
+                                </button>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-2">Cor</label>
+                                <div className="flex gap-2 flex-wrap">
+                                    {COLORS.map(c => (
+                                        <button key={c} onClick={() => setWsColor(c)}
+                                            className={`w-7 h-7 rounded-full transition-transform ${wsColor === c ? 'scale-125 ring-2 ring-white' : 'hover:scale-110'}`}
+                                            style={{ backgroundColor: c }}
                                         />
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <label className="block text-xs text-slate-500">Sincronizar no GitHub (Smart Sync)</label>
-                                        <button
-                                            type="button"
-                                            onClick={() => setWsSyncEnabled(!wsSyncEnabled)}
-                                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-75 ${wsSyncEnabled ? 'bg-primary' : 'bg-slate-700'}`}
-                                            role="switch"
-                                            aria-checked={wsSyncEnabled}
-                                        >
-                                            <span className="sr-only">Usar configuração de Sincronização</span>
-                                            <span
-                                                aria-hidden="true"
-                                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${wsSyncEnabled ? 'translate-x-4' : 'translate-x-0'}`}
-                                            />
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs text-slate-500 mb-2">Cor</label>
-                                        <div className="flex gap-2 flex-wrap">
-                                            {COLORS.map(c => (
-                                                <button key={c} onClick={() => setWsColor(c)}
-                                                    className={`w-7 h-7 rounded-full transition-transform ${wsColor === c ? 'scale-125 ring-2 ring-white' : 'hover:scale-110'}`}
-                                                    style={{ backgroundColor: c }}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
-                                <div className="flex gap-3">
-                                    <button onClick={handleSaveWorkspace} disabled={savingWs || !wsName.trim()}
-                                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary hover:bg-blue-600 disabled:opacity-50 text-sm font-semibold rounded-lg transition-colors">
-                                        <Save className="w-4 h-4" />
-                                        {savingWs ? 'Salvando...' : 'Salvar'}
-                                    </button>
-                                    <button onClick={() => setConfirmDeleteWs(true)}
-                                        className="px-4 py-2 text-red-400 hover:bg-red-500/10 text-sm font-semibold rounded-lg transition-colors border border-red-500/30">
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <p className="text-sm text-slate-400 mb-2">Excluir <strong className="text-white">{workspace.name}</strong>?</p>
-                                <p className="text-xs text-red-400 mb-6">Todos os servidores serão excluídos permanentemente.</p>
-                                <div className="flex gap-3">
-                                    <button onClick={() => setConfirmDeleteWs(false)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">Cancelar</button>
-                                    <button onClick={handleDeleteWorkspace} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold rounded-lg transition-colors">Excluir</button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={handleSaveWorkspace} disabled={savingWs || !wsName.trim()}
+                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary hover:bg-blue-600 disabled:opacity-50 text-sm font-semibold text-white rounded-lg transition-colors">
+                                <Save className="w-4 h-4" />
+                                {savingWs ? 'Salvando...' : 'Salvar'}
+                            </button>
+                            <button onClick={() => setConfirmDeleteWs(true)}
+                                className="px-4 py-2 text-red-400 hover:bg-red-500/10 text-sm font-semibold rounded-lg transition-colors border border-red-500/30">
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-sm text-slate-400 mb-2">Excluir <strong className="text-white">{workspace.name}</strong>?</p>
+                        <p className="text-xs text-red-400 mb-6">Todos os servidores serão excluídos permanentemente.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setConfirmDeleteWs(false)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white rounded-lg transition-colors">Cancelar</button>
+                            <button onClick={handleDeleteWorkspace} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold text-white rounded-lg transition-colors">Excluir</button>
+                        </div>
+                    </>
+                )}
+            </Modal>
 
             {/* ── Delete Server Confirmation ── */}
-            {confirmDeleteServerId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-96 shadow-2xl">
-                        <h2 className="text-lg font-semibold mb-2 text-red-400">Excluir servidor?</h2>
-                        <p className="text-sm text-slate-400 mb-6">Esta ação não pode ser desfeita.</p>
-                        <div className="flex gap-3">
-                            <button onClick={() => setConfirmDeleteServerId(null)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">Cancelar</button>
-                            <button onClick={() => handleDeleteServer(confirmDeleteServerId)} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold rounded-lg transition-colors">Excluir</button>
-                        </div>
-                    </div>
+            <Modal
+                isOpen={!!confirmDeleteServerId}
+                onClose={() => setConfirmDeleteServerId(null)}
+                title="Excluir servidor?"
+                width="w-96"
+            >
+                <p className="text-sm text-slate-400 mb-6">Esta ação não pode ser desfeita.</p>
+                <div className="flex gap-3">
+                    <button onClick={() => setConfirmDeleteServerId(null)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white rounded-lg transition-colors">Cancelar</button>
+                    <button onClick={() => confirmDeleteServerId && handleDeleteServer(confirmDeleteServerId)} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold text-white rounded-lg transition-colors">Excluir</button>
                 </div>
-            )}
+            </Modal>
         </div>
     );
 };

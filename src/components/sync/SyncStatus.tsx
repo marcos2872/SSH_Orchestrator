@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Cloud, CloudOff, RefreshCw, CheckCircle2, Download, Upload } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, CheckCircle2, Download, Upload, AlertTriangle } from 'lucide-react';
+import Modal from '../Modal';
 
 export type SyncState = 'idle' | 'syncing' | 'success' | 'error' | 'offline';
 
@@ -12,6 +13,7 @@ interface Props {
 
 const SyncStatus: React.FC<Props> = ({ state, lastSyncTime, onPull, onPush }) => {
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [showPushConfirm, setShowPushConfirm] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -48,6 +50,11 @@ const SyncStatus: React.FC<Props> = ({ state, lastSyncTime, onPull, onPush }) =>
             case 'idle':
             default: return 'Sincronização';
         }
+    };
+
+    const confirmPush = () => {
+        setShowPushConfirm(false);
+        if (onPush) onPush();
     };
 
     return (
@@ -93,10 +100,8 @@ const SyncStatus: React.FC<Props> = ({ state, lastSyncTime, onPull, onPush }) =>
 
                     <button
                         onClick={() => {
-                            if (window.confirm("Atenção! Fazer PUSH irá forçar o estado do seu PC atual para a nuvem, sobrescrevendo alterações de outros computadores. Deseja continuar?")) {
-                                setDropdownOpen(false);
-                                if (onPush) onPush();
-                            }
+                            setDropdownOpen(false);
+                            setShowPushConfirm(true);
                         }}
                         className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-slate-700/50 transition-colors border-t border-slate-700/50 text-slate-300 hover:text-white"
                     >
@@ -108,6 +113,33 @@ const SyncStatus: React.FC<Props> = ({ state, lastSyncTime, onPull, onPush }) =>
                     </button>
                 </div>
             )}
+
+            <Modal
+                isOpen={showPushConfirm}
+                onClose={() => setShowPushConfirm(false)}
+                title="Atenção"
+                icon={<AlertTriangle className="w-5 h-5 text-orange-400" />}
+            >
+                <div className="mb-6">
+                    <p className="text-sm text-slate-300">
+                        Fazer PUSH irá <strong className="text-white">forçar o estado do seu PC atual</strong> para a nuvem, sobrescrevendo alterações de outros computadores. Deseja continuar?
+                    </p>
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setShowPushConfirm(false)}
+                        className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white rounded-lg transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={confirmPush}
+                        className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-sm font-semibold text-white rounded-lg transition-colors"
+                    >
+                        Forçar Envio
+                    </button>
+                </div>
+            </Modal>
         </div>
     );
 };
