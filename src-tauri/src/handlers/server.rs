@@ -9,7 +9,7 @@ pub async fn get_servers(
 ) -> Result<Vec<crate::models::Server>, String> {
     let ws_uuid = Uuid::parse_str(&workspace_id).map_err(|e| e.to_string())?;
     let rows =
-        sqlx::query_as::<_, crate::models::ServerRow>("SELECT * FROM servers WHERE workspace_id = ?")
+        sqlx::query_as::<_, crate::models::ServerRow>("SELECT * FROM servers WHERE workspace_id = ? AND deleted = 0")
             .bind(ws_uuid)
             .fetch_all(&state.db.pool)
             .await
@@ -52,11 +52,15 @@ pub async fn create_server(
         tags: vec![],
         folder_color: None,
         has_saved_password: password_enc.is_some(),
+        hlc: format!("{}", chrono::Utc::now().timestamp_millis()),
+        deleted: false,
     };
 
+    let hlc = format!("{}", chrono::Utc::now().timestamp_millis());
+
     sqlx::query(
-        "INSERT INTO servers (id, workspace_id, name, host, port, username, tags, password_enc)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO servers (id, workspace_id, name, host, port, username, tags, password_enc, hlc, deleted)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
     )
     .bind(&server.id)
     .bind(&server.workspace_id)
@@ -66,6 +70,7 @@ pub async fn create_server(
     .bind(&server.username)
     .bind(serde_json::to_string(&server.tags).unwrap())
     .bind(&password_enc)
+    .bind(&hlc)
     .execute(&state.db.pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -98,14 +103,17 @@ pub async fn update_server(
         None
     };
 
+    let hlc = format!("{}", chrono::Utc::now().timestamp_millis());
+
     sqlx::query(
-        "UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password_enc = ? WHERE id = ?",
+        "UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password_enc = ?, hlc = ? WHERE id = ?",
     )
     .bind(&name)
     .bind(&host)
     .bind(port)
     .bind(&username)
     .bind(&password_enc)
+    .bind(&hlc)
     .bind(srv_id)
     .execute(&state.db.pool)
     .await
@@ -117,7 +125,9 @@ pub async fn update_server(
 #[tauri::command]
 pub async fn delete_server(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let srv_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    sqlx::query("DELETE FROM servers WHERE id = ?")
+    let hlc = format!("{}", chrono::Utc::now().timestamp_millis());
+    sqlx::query("UPDATE servers SET deleted = 1, hlc = ? WHERE id = ?")
+        .bind(&hlc)
         .bind(srv_id)
         .execute(&state.db.pool)
         .await

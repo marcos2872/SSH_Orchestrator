@@ -12,6 +12,8 @@ pub struct Workspace {
     pub local_only: bool,
     pub color: String,
     pub updated_at: DateTime<Utc>,
+    pub hlc: String,
+    pub deleted: bool,
 }
 
 // Intermediate struct used for DB mapping (tags stored as JSON string in SQLite)
@@ -26,6 +28,8 @@ pub struct ServerRow {
     pub tags: String,
     pub folder_color: Option<String>,
     pub password_enc: Option<String>,
+    pub hlc: String,
+    pub deleted: bool,
 }
 
 impl ServerRow {
@@ -40,6 +44,8 @@ impl ServerRow {
             tags: serde_json::from_str(&self.tags).unwrap_or_default(),
             folder_color: self.folder_color,
             has_saved_password: self.password_enc.is_some(),
+            hlc: self.hlc,
+            deleted: self.deleted,
         }
     }
 }
@@ -56,4 +62,6 @@ pub struct Server {
     pub folder_color: Option<String>,
     /// True if an encrypted password is stored — never expose the actual password to the frontend
     pub has_saved_password: bool,
+    pub hlc: String,
+    pub deleted: bool,
 }

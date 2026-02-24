@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 #[tauri::command]
 pub async fn get_workspaces(state: State<'_, AppState>) -> Result<Vec<Workspace>, String> {
-    sqlx::query_as::<_, Workspace>("SELECT * FROM workspaces ORDER BY name")
+    sqlx::query_as::<_, Workspace>("SELECT * FROM workspaces WHERE deleted = 0 ORDER BY name")
         .fetch_all(&state.db.pool)
         .await
         .map_err(|e| e.to_string())
@@ -25,10 +25,12 @@ pub async fn create_workspace(
         local_only: false,
         color,
         updated_at: Utc::now(),
+        hlc: format!("{}", Utc::now().timestamp_millis()),
+        deleted: false,
     };
 
     sqlx::query(
-        "INSERT INTO workspaces (id, name, sync_enabled, local_only, color, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO workspaces (id, name, sync_enabled, local_only, color, updated_at, hlc, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&workspace.id)
     .bind(&workspace.name)
@@ -36,6 +38,8 @@ pub async fn create_workspace(
     .bind(workspace.local_only)
     .bind(&workspace.color)
     .bind(&workspace.updated_at)
+    .bind(&workspace.hlc)
+    .bind(workspace.deleted)
     .execute(&state.db.pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -53,22 +57,25 @@ pub async fn update_workspace(
 ) -> Result<(), String> {
     let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let now = Utc::now();
+    let hlc = format!("{}", now.timestamp_millis());
     
     if let Some(sync) = sync_enabled {
-        sqlx::query("UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, updated_at = ? WHERE id = ?")
+        sqlx::query("UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, updated_at = ?, hlc = ? WHERE id = ?")
             .bind(&name)
             .bind(&color)
             .bind(sync)
             .bind(&now)
+            .bind(&hlc)
             .bind(ws_id)
             .execute(&state.db.pool)
             .await
             .map_err(|e| e.to_string())?;
     } else {
-        sqlx::query("UPDATE workspaces SET name = ?, color = ?, updated_at = ? WHERE id = ?")
+        sqlx::query("UPDATE workspaces SET name = ?, color = ?, updated_at = ?, hlc = ? WHERE id = ?")
             .bind(&name)
             .bind(&color)
             .bind(&now)
+            .bind(&hlc)
             .bind(ws_id)
             .execute(&state.db.pool)
             .await
@@ -81,15 +88,22 @@ pub async fn update_workspace(
 #[tauri::command]
 pub async fn delete_workspace(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    sqlx::query("DELETE FROM servers WHERE workspace_id = ?")
+    let hlc = format!("{}", Utc::now().timestamp_millis());
+    
+    // Soft delete to allow sync
+    sqlx::query("UPDATE servers SET deleted = 1, hlc = ? WHERE workspace_id = ?")
+        .bind(&hlc)
         .bind(ws_id)
         .execute(&state.db.pool)
         .await
         .map_err(|e| e.to_string())?;
-    sqlx::query("DELETE FROM workspaces WHERE id = ?")
+        
+    sqlx::query("UPDATE workspaces SET deleted = 1, hlc = ? WHERE id = ?")
+        .bind(&hlc)
         .bind(ws_id)
         .execute(&state.db.pool)
         .await
         .map_err(|e| e.to_string())?;
+        
     Ok(())
 }

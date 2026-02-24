@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useAuth } from '../hooks/useAuth';
-import SyncStatus from './sync/SyncStatus';
+import SyncStatus, { SyncState } from './sync/SyncStatus';
+import { syncWorkspace } from '../lib/api/workspaces';
 
 const appWindow = getCurrentWindow();
 
@@ -24,6 +25,7 @@ interface Props {
 const TitleBar: React.FC<Props> = ({ currentWorkspace }) => {
     const [isMaximized, setIsMaximized] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [syncState, setSyncState] = useState<SyncState>('idle');
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const { user, isLoading, login, logout } = useAuth();
@@ -46,6 +48,31 @@ const TitleBar: React.FC<Props> = ({ currentWorkspace }) => {
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
+
+    useEffect(() => {
+        if (currentWorkspace?.sync_enabled) {
+            setSyncState('idle');
+        } else {
+            setSyncState('offline');
+        }
+    }, [currentWorkspace?.sync_enabled]);
+
+    const handleManualSync = async () => {
+        if (!currentWorkspace?.id || !currentWorkspace.sync_enabled) return;
+        setSyncState('syncing');
+        try {
+            await syncWorkspace(currentWorkspace.id);
+            setSyncState('success');
+            // Revert back to idle after a few seconds
+            setTimeout(() => setSyncState('idle'), 3000);
+
+            // Dispatch event to reload workspaces since they might have changed
+            window.dispatchEvent(new Event('workspaces-updated'));
+        } catch (e) {
+            console.error("Sync failed:", e);
+            setSyncState('error');
+        }
+    };
 
     const handleMinimize = () => appWindow.minimize();
     const handleMaximize = () => isMaximized ? appWindow.unmaximize() : appWindow.maximize();
@@ -92,7 +119,10 @@ const TitleBar: React.FC<Props> = ({ currentWorkspace }) => {
                     ) : (
                         /* Avatar + dropdown e SyncStatus */
                         <>
-                            <SyncStatus state={currentWorkspace?.sync_enabled ? "idle" : "offline"} />
+                            <SyncStatus
+                                state={syncState}
+                                onManualSync={handleManualSync}
+                            />
                             <div className="w-px h-6 bg-slate-800 mx-2" />
                             <button
                                 className="titlebar-avatar-btn"

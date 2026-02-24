@@ -59,6 +59,12 @@ impl DbService {
         .await
         .ok(); // ignore error — column already exists
 
+        // Migrations for sync columns
+        sqlx::query("ALTER TABLE workspaces ADD COLUMN hlc TEXT NOT NULL DEFAULT ''").execute(&pool).await.ok();
+        sqlx::query("ALTER TABLE workspaces ADD COLUMN deleted BOOLEAN NOT NULL DEFAULT 0").execute(&pool).await.ok();
+        sqlx::query("ALTER TABLE servers ADD COLUMN hlc TEXT NOT NULL DEFAULT ''").execute(&pool).await.ok();
+        sqlx::query("ALTER TABLE servers ADD COLUMN deleted BOOLEAN NOT NULL DEFAULT 0").execute(&pool).await.ok();
+
         Ok(Self { pool })
     }
 }

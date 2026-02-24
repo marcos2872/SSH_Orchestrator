@@ -69,9 +69,9 @@ graph TD
 - [x] Master Password Vault implementation
 
 ### ☁️ Phase 0.3 - Smart Sync
-- [ ] GitHub OAuth + Private Repo provisioning
-- [ ] **CRDT Engine**: Implementation of conflict-free synchronization logic
-- [ ] Workspace push/pull with automatic merging
+- [x] GitHub OAuth + Private Repo provisioning
+- [x] **CRDT Engine**: Implementation of conflict-free synchronization logic
+- [x] Workspace push/pull with automatic merging
 
 ### ⚡ Phase 0.4 - Pro Terminal & SFTP
 - [ ] **Terminal Tabs & Split-Pane** support
