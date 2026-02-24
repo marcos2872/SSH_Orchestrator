@@ -48,6 +48,27 @@ pub fn sftp_list_local(
         .map_err(|e| e.to_string())
 }
 
+/// Get the remote home directory for a given SFTP session (realpath(".")).
+#[tauri::command]
+pub async fn sftp_workdir(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<String, String> {
+    state
+        .sftp
+        .workdir(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get the local home directory ($HOME).
+#[tauri::command]
+pub fn sftp_home_dir(
+    state: State<'_, AppState>,
+) -> String {
+    state.sftp.home_dir()
+}
+
 #[tauri::command]
 pub async fn sftp_list_dir(
     state: State<'_, AppState>,

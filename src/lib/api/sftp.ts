@@ -60,3 +60,11 @@ export interface LocalEntry {
 /** List local filesystem directory. */
 export const sftpListLocal = (path: string) =>
     invoke<LocalEntry[]>('sftp_list_local', { path });
+
+/** Get the remote home directory for a given SFTP session (realpath(".")). */
+export const sftpWorkdir = (sessionId: string) =>
+    invoke<string>('sftp_workdir', { sessionId });
+
+/** Get the local home directory ($HOME). */
+export const sftpHomeDir = () =>
+    invoke<string>('sftp_home_dir');

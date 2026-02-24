@@ -67,6 +67,8 @@ pub fn run() {
             handlers::sftp::sftp_close_session,
             handlers::sftp::sftp_direct_connect,
             handlers::sftp::sftp_list_local,
+            handlers::sftp::sftp_workdir,
+            handlers::sftp::sftp_home_dir,
             handlers::vault::is_vault_configured,
             handlers::vault::is_vault_locked,
             handlers::vault::unlock_vault,

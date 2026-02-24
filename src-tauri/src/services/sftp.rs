@@ -1,13 +1,11 @@
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use russh::{
-    client::{self, Handle},
-    keys::PublicKey,
-};
-use russh_sftp::client::SftpSession;
+use russh::client::{self, Handle};
+use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -44,6 +42,8 @@ pub struct LocalEntry {
 
 struct SftpState {
     session: SftpSession,
+    // Store handle for direct connections to keep them alive
+    _handle: Option<Handle<SshClientHandler>>,
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -63,9 +63,10 @@ impl SftpService {
         handle: Arc<Mutex<Handle<SshClientHandler>>>,
     ) -> Result<String> {
         let channel = handle.lock().await.channel_open_session().await?;
+        channel.request_subsystem(true, "sftp").await?;
         let session = SftpSession::new(channel.into_stream()).await?;
         let id = Uuid::new_v4().to_string();
-        self.sessions.insert(id.clone(), SftpState { session });
+        self.sessions.insert(id.clone(), SftpState { session, _handle: None });
         Ok(id)
     }
 
@@ -85,10 +86,25 @@ impl SftpService {
             return Err(anyhow!("Autenticação SSH falhou"));
         }
         let channel = handle.channel_open_session().await?;
+        channel.request_subsystem(true, "sftp").await?;
         let session = SftpSession::new(channel.into_stream()).await?;
         let id = Uuid::new_v4().to_string();
-        self.sessions.insert(id.clone(), SftpState { session });
+        self.sessions.insert(id.clone(), SftpState { session, _handle: Some(handle) });
         Ok(id)
+    }
+
+    /// Return the remote working directory (home) via SFTP realpath(".").
+    pub async fn workdir(&self, session_id: &str) -> Result<String> {
+        let guard = self.sessions.get(session_id)
+            .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+        let path = guard.session.canonicalize(".").await?;
+        Ok(path)
+    }
+
+    /// Return the local home directory.
+    pub fn home_dir(&self) -> String {
+        std::env::var("HOME")
+            .unwrap_or_else(|_| "/".to_string())
     }
 
     /// List local filesystem directory.
@@ -155,7 +171,10 @@ impl SftpService {
         let guard = self.sessions.get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
 
-        guard.session.write(remote_path, &bytes).await?;
+        let flags = OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE;
+        let mut remote_file = guard.session.open_with_flags(remote_path, flags).await?;
+        remote_file.write_all(&bytes).await?;
+        // O `struct File` não tem `close()`, ele fecha no drop do rust implicitamente ao sair do escopo ou usa sync_all. Aqui o drop é suficiente quando finalizado.
 
         let _ = app.emit(&format!("sftp://progress/{}", session_id), ProgressEvent {
             session_id: session_id.to_string(),

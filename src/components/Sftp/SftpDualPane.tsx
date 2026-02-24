@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     sftpDirectConnect, sftpListDir, sftpListLocal, sftpUpload, sftpDownload,
-    sftpCloseSession, type SftpEntry, type LocalEntry,
+    sftpCloseSession, sftpWorkdir, sftpHomeDir, onSftpProgress,
+    type SftpEntry, type LocalEntry, type SftpProgress,
 } from '../../lib/api/sftp';
 import { getServerPassword } from '../../lib/api/servers';
 import type { Server } from '../../hooks/useTerminalManager';
@@ -28,7 +29,6 @@ const fmt = (bytes: number) => {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
-const HOME = '/';
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -155,7 +155,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
     const pwInputRef = useRef<HTMLInputElement>(null);
 
     // Local pane
-    const [localCwd, setLocalCwd] = useState(HOME);
+    const [localCwd, setLocalCwd] = useState('/');
     const [localEntries, setLocalEntries] = useState<LocalEntry[]>([]);
     const [localLoading, setLocalLoading] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
@@ -173,33 +173,10 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
     const [dropSide, setDropSide] = useState<'local' | 'remote' | null>(null);
 
     // Transfer status
-    const [transferMsg, setTransferMsg] = useState<string | null>(null);
+    const [progress, setProgress] = useState<SftpProgress | null>(null);
 
-    // ── Connect ───────────────────────────────────────────────────────────────
-    const doConnect = useCallback(async (pw: string) => {
-        setConnState('connecting');
-        try {
-            const id = await sftpDirectConnect(server.host, server.port, server.username, pw);
-            setSftp(id);
-            setConnState('connected');
-        } catch (e) {
-            setConnState('error');
-            setLocalError(String(e));
-        }
-    }, [server]);
-
-    useEffect(() => {
-        if (server.has_saved_password) {
-            getServerPassword(server.id).then(pw => {
-                if (pw) doConnect(pw);
-                else setConnState('prompt');
-            }).catch(() => setConnState('prompt'));
-        } else {
-            setConnState('prompt');
-        }
-        return () => { if (sftp) sftpCloseSession(sftp); };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    // Track connection attempt to avoid loops
+    const connectAttempted = useRef(false);
 
     // ── List local ───────────────────────────────────────────────────────────
     const listLocal = useCallback(async (path: string) => {
@@ -215,6 +192,14 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
             setLocalLoading(false);
         }
     }, []);
+
+    // ── Pre-fetch local home ──
+    useEffect(() => {
+        sftpHomeDir().then(dir => {
+            setLocalCwd(dir);
+            listLocal(dir);
+        }).catch(() => listLocal('/'));
+    }, [listLocal]);
 
     // ── List remote ──────────────────────────────────────────────────────────
     const listRemote = useCallback(async (path: string) => {
@@ -232,10 +217,90 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         }
     }, [sftp]);
 
-    useEffect(() => { listLocal(localCwd); }, []); // eslint-disable-line
+    // ── Connect ───────────────────────────────────────────────────────────────
+    const doConnect = useCallback(async (pw: string) => {
+        if (sftp) return;
+        setConnState('connecting');
+        try {
+            const id = await sftpDirectConnect(server.host, server.port, server.username, pw);
+            setSftp(id);
+            setConnState('connected');
+
+            // Get remote home
+            try {
+                const wDir = await sftpWorkdir(id);
+                setRemoteCwd(wDir);
+                // Call listRemote directly with the new ID to avoid dependency on sftp state
+                setRemoteLoading(true);
+                setRemoteError(null);
+                try {
+                    const entries = await sftpListDir(id, wDir);
+                    setRemoteEntries(entries);
+                    setRemoteCwd(wDir);
+                } catch (e) {
+                    setRemoteError(String(e));
+                } finally {
+                    setRemoteLoading(false);
+                }
+            } catch {
+                listRemote('/'); // fallback
+            }
+        } catch (e) {
+            setConnState('error');
+            setLocalError(String(e));
+            connectAttempted.current = false;
+        }
+    }, [server, sftp, listRemote]);
+
     useEffect(() => {
-        if (sftp) { listRemote(remoteCwd); }
-    }, [sftp]); // eslint-disable-line
+        if (connectAttempted.current) return;
+
+        if (server.has_saved_password) {
+            connectAttempted.current = true;
+            getServerPassword(server.id).then(pw => {
+                if (pw) doConnect(pw);
+                else {
+                    setConnState('prompt');
+                    connectAttempted.current = false;
+                }
+            }).catch(() => {
+                setConnState('prompt');
+                connectAttempted.current = false;
+            });
+        } else {
+            setConnState('prompt');
+        }
+    }, [server.id, server.has_saved_password, doConnect]);
+
+    // Explicit listRemote that takes a path but uses current sftp
+    const listRemotePath = useCallback(async (path: string) => {
+        if (!sftp) return;
+        setRemoteLoading(true);
+        setRemoteError(null);
+        try {
+            const entries = await sftpListDir(sftp, path);
+            setRemoteEntries(entries);
+            setRemoteCwd(path);
+        } catch (e) {
+            setRemoteError(String(e));
+        } finally {
+            setRemoteLoading(false);
+        }
+    }, [sftp]);
+
+    useEffect(() => {
+        if (!sftp) return;
+        const unlisten = onSftpProgress(sftp, (p) => {
+            setProgress(p);
+            if (p.bytes_done === p.bytes_total) {
+                setTimeout(() => setProgress(null), 2000);
+            }
+        });
+        return () => {
+            unlisten.then(f => f());
+            sftpCloseSession(sftp);
+        };
+    }, [sftp]);
 
     // ── Drag & Drop ──────────────────────────────────────────────────────────
     const handleDragStart = useCallback((item: DragItem) => {
@@ -252,31 +317,25 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         if (!dragging || dragging.side === targetSide || dragging.is_dir || !sftp) return;
 
         if (targetSide === 'remote') {
-            // local → remote: upload
             const remotePath = `${targetDir.replace(/\/$/, '')}/${dragging.name}`;
-            setTransferMsg(`⬆ Fazendo upload: ${dragging.name}...`);
             try {
                 await sftpUpload(sftp, dragging.path, remotePath);
-                setTransferMsg(`✓ Upload concluído: ${dragging.name}`);
                 await listRemote(remoteCwd);
             } catch (e) {
-                setTransferMsg(`✗ Erro no upload: ${String(e)}`);
+                setRemoteError(`Erro no upload: ${String(e)}`);
             }
         } else {
-            // remote → local: download
             const localPath = `${targetDir.replace(/\/$/, '')}/${dragging.name}`;
-            setTransferMsg(`⬇ Fazendo download: ${dragging.name}...`);
             try {
                 await sftpDownload(sftp, dragging.path, localPath);
-                setTransferMsg(`✓ Download concluído: ${dragging.name}`);
                 await listLocal(localCwd);
             } catch (e) {
-                setTransferMsg(`✗ Erro no download: ${String(e)}`);
+                setLocalError(`Erro no download: ${String(e)}`);
             }
         }
         setDragging(null);
-        setTimeout(() => setTransferMsg(null), 3000);
     }, [dragging, sftp, remoteCwd, localCwd, listRemote, listLocal]);
+
 
     // ── Render ────────────────────────────────────────────────────────────────
 
@@ -318,13 +377,6 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden bg-slate-950">
-            {/* Transfer status bar */}
-            {transferMsg && (
-                <div className="px-4 py-1.5 text-xs bg-sky-950 text-sky-300 border-b border-sky-800 shrink-0">
-                    {transferMsg}
-                </div>
-            )}
-
             {/* Dual pane — 50/50 split */}
             <div className="flex flex-1 overflow-hidden divide-x divide-slate-800">
                 {/* Local pane */}
@@ -356,24 +408,20 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                             if (!localSelected || !sftp) return;
                             const name = localSelected.split('/').pop()!;
                             const remotePath = `${remoteCwd.replace(/\/$/, '')}/${name}`;
-                            setTransferMsg(`⬆ ${name}...`);
-                            try { await sftpUpload(sftp, localSelected, remotePath); await listRemote(remoteCwd); setTransferMsg(`✓ ${name}`); }
-                            catch (e) { setTransferMsg(`✗ ${String(e)}`); }
-                            setTimeout(() => setTransferMsg(null), 3000);
+                            try { await sftpUpload(sftp, localSelected, remotePath); await listRemote(remoteCwd); }
+                            catch (e) { setRemoteError(`Upload falhou: ${String(e)}`); }
                         }}
                         className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-sky-700 disabled:opacity-30 transition-colors text-sm"
                     >→</button>
                     <button
                         title="Download ← (remoto para local)"
-                        disabled={!remoteSelected || remoteEntries.find(e => e.path === remoteSelected)?.is_dir}
+                        disabled={!remoteSelected || remoteEntries.find(e => e.path === remoteSelected)?.is_dir || progress !== null}
                         onClick={async () => {
                             if (!remoteSelected || !sftp) return;
                             const name = remoteSelected.split('/').pop()!;
                             const localPath = `${localCwd.replace(/\/$/, '')}/${name}`;
-                            setTransferMsg(`⬇ ${name}...`);
-                            try { await sftpDownload(sftp, remoteSelected, localPath); await listLocal(localCwd); setTransferMsg(`✓ ${name}`); }
-                            catch (e) { setTransferMsg(`✗ ${String(e)}`); }
-                            setTimeout(() => setTransferMsg(null), 3000);
+                            try { await sftpDownload(sftp, remoteSelected, localPath); await listLocal(localCwd); }
+                            catch (e) { setLocalError(`Download falhou: ${String(e)}`); }
                         }}
                         className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-sky-700 disabled:opacity-30 transition-colors text-sm"
                     >←</button>
@@ -392,13 +440,31 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                         dropTarget={dropSide === 'remote'}
                         selected={remoteSelected}
                         onSelect={setRemoteSelected}
-                        onNavigate={listRemote}
+                        onNavigate={listRemotePath}
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                     />
                 </div>
             </div>
+
+            {/* Bottom Progress Bar */}
+            {progress && (
+                <div className="h-8 bg-slate-900 border-t border-slate-800 flex items-center px-4 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] z-10">
+                    <div className="flex items-center w-full max-w-2xl mx-auto gap-4">
+                        <span className="text-xs text-slate-400 truncate w-64">{progress.file}</span>
+                        <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-sky-500 transition-all duration-200 ease-out"
+                                style={{ width: `${(progress.bytes_done / Math.max(1, progress.bytes_total)) * 100}%` }}
+                            />
+                        </div>
+                        <span className="text-xs font-mono text-slate-300 w-12 text-right">
+                            {Math.round((progress.bytes_done / Math.max(1, progress.bytes_total)) * 100)}%
+                        </span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
