@@ -26,7 +26,7 @@ interface AuthResponse {
 export function useAuth() {
     const [auth, setAuth] = useState<AuthState>({ user: null, isLoading: true });
 
-    useEffect(() => {
+    const fetchUser = () => {
         invoke<AuthResponse | null>('get_current_user')
             .then(res => {
                 if (res) {
@@ -40,6 +40,17 @@ export function useAuth() {
                 console.error("Failed to fetch user:", err);
                 setAuth({ user: null, isLoading: false });
             });
+    };
+
+    useEffect(() => {
+        fetchUser();
+
+        const handleAuthChanged = () => {
+            fetchUser();
+        };
+
+        window.addEventListener('auth-changed', handleAuthChanged);
+        return () => window.removeEventListener('auth-changed', handleAuthChanged);
     }, []);
 
     const login = async () => {
@@ -50,6 +61,7 @@ export function useAuth() {
                 isLoading: false,
                 user: response.user,
             });
+            window.dispatchEvent(new Event('auth-changed'));
             window.dispatchEvent(new Event('workspaces-updated'));
         } catch (e) {
             console.error('Login failed:', e);
@@ -61,6 +73,7 @@ export function useAuth() {
         setAuth((s) => ({ ...s, isLoading: true }));
         try {
             await invoke('github_logout');
+            window.dispatchEvent(new Event('auth-changed'));
         } catch (e) {
             console.error('Logout failed:', e);
         }
