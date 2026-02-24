@@ -7,7 +7,6 @@ import {
 
 interface Props {
     sessionId: string | null; // active SSH session id to piggyback on
-    serverId: string;
     onClose: () => void;
 }
 
@@ -17,7 +16,7 @@ interface Transfer {
     done: boolean;
 }
 
-const SftpPanel: React.FC<Props> = ({ sessionId, serverId, onClose }) => {
+const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
     const [sftpSessionId, setSftpSessionId] = useState<string | null>(null);
     const [cwd, setCwd] = useState('/');
     const [entries, setEntries] = useState<SftpEntry[]>([]);

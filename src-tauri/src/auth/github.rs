@@ -27,8 +27,8 @@ pub struct GitHubUser {
 #[derive(Deserialize, Debug)]
 struct TokenResponse {
     access_token: String,
-    token_type: String,
-    scope: String,
+    _token_type: String,
+    _scope: String,
 }
 
 pub async fn start_oauth_flow() -> Result<String> {
