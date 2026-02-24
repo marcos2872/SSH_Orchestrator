@@ -33,3 +33,5 @@ thiserror = "2.0.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0.102"
+base64 = "0.22"
+dashmap = "6"

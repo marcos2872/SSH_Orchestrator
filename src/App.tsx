@@ -11,13 +11,21 @@ interface Workspace {
   color: string;
 }
 
+interface Server {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+}
+
 const App: React.FC = () => {
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
-  const [activeServerId, setActiveServerId] = useState<string | null>(null);
+  const [activeServer, setActiveServer] = useState<Server | null>(null);
 
   const handleSelectWorkspace = (ws: Workspace | null) => {
     setSelectedWorkspace(ws);
-    setActiveServerId(null);
+    setActiveServer(null);
   };
 
   return (
@@ -31,9 +39,9 @@ const App: React.FC = () => {
           {selectedWorkspace ? (
             <WorkspaceDetail
               workspace={selectedWorkspace}
-              onConnect={setActiveServerId}
+              onConnect={setActiveServer}
               onWorkspaceUpdated={(updated) => setSelectedWorkspace(updated)}
-              onWorkspaceDeleted={() => { setSelectedWorkspace(null); setActiveServerId(null); }}
+              onWorkspaceDeleted={() => { setSelectedWorkspace(null); setActiveServer(null); }}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-slate-500">
@@ -47,10 +55,10 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {activeServerId && (
+          {activeServer && (
             <Terminal
-              serverId={activeServerId}
-              onClose={() => setActiveServerId(null)}
+              server={activeServer}
+              onClose={() => setActiveServer(null)}
             />
           )}
         </main>

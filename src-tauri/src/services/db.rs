@@ -1,4 +1,4 @@
-use sqlx::{sqlite::SqliteConnectOptions, ConnectOptions, SqlitePool};
+use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
 use std::fs;
 use tauri::{AppHandle, Manager};
 use anyhow::Result;
@@ -19,7 +19,7 @@ impl DbService {
             
         let pool = SqlitePool::connect_with(options).await?;
         
-        // Initialize tables
+        // workspaces table
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS workspaces (
                 id TEXT PRIMARY KEY,
@@ -31,6 +31,7 @@ impl DbService {
             )"
         ).execute(&pool).await?;
 
+        // servers table
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS servers (
                 id TEXT PRIMARY KEY,
@@ -41,9 +42,18 @@ impl DbService {
                 username TEXT NOT NULL,
                 tags TEXT NOT NULL,
                 folder_color TEXT,
+                password_enc TEXT,
                 FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
             )"
         ).execute(&pool).await?;
+
+        // Migration: add password_enc to existing DBs that don't have it yet
+        sqlx::query(
+            "ALTER TABLE servers ADD COLUMN password_enc TEXT"
+        )
+        .execute(&pool)
+        .await
+        .ok(); // ignore error — column already exists
 
         Ok(Self { pool })
     }

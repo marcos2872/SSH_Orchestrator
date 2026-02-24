@@ -23,6 +23,7 @@ pub struct ServerRow {
     pub username: String,
     pub tags: String,
     pub folder_color: Option<String>,
+    pub password_enc: Option<String>,
 }
 
 impl ServerRow {
@@ -36,6 +37,7 @@ impl ServerRow {
             username: self.username,
             tags: serde_json::from_str(&self.tags).unwrap_or_default(),
             folder_color: self.folder_color,
+            has_saved_password: self.password_enc.is_some(),
         }
     }
 }
@@ -50,4 +52,6 @@ pub struct Server {
     pub username: String,
     pub tags: Vec<String>,
     pub folder_color: Option<String>,
+    /// True if an encrypted password is stored — never expose the actual password to the frontend
+    pub has_saved_password: bool,
 }
