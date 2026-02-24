@@ -5526,6 +5526,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "dashmap",
+ "dotenvy",
  "git2",
  "lazy_static",
  "open",

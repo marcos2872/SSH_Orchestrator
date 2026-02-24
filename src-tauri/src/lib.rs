@@ -14,6 +14,10 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    match dotenvy::dotenv() {
+        Ok(path) => tracing::info!(".env file loaded from: {:?}", path),
+        Err(e) => tracing::warn!("Could not load .env file: {}", e),
+    }
     tracing::info!("Starting SSH Config Sync backend...");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

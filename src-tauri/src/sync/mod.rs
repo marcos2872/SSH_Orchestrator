@@ -13,29 +13,59 @@ pub async fn pull_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
     _workspace_id: String,
+    provided_token: Option<String>,
 ) -> Result<(), String> {
     
     let _lock = state.sync_lock.try_lock().map_err(|_| "Sincronização já em andamento")?;
 
-    let token = {
+    let token = if let Some(t) = provided_token {
+        t
+    } else {
         let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         let token_path = app_dir.join("github_token.enc");
         let encrypted = fs::read_to_string(&token_path).map_err(|_| "Sessão não encontrada")?;
-        state.crypto.decrypt(&encrypted).map_err(|_| "Token inválido")?
+        state.crypto.decrypt(&encrypted).map_err(|_| "Token inválido ou cofre bloqueado")?
     };
 
+    tracing::info!("Starting pull_workspace...");
     let repo_info = repo::ensure_sync_repo_exists(&token)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!("Failed to ensure sync repo exists in pull: {}", e);
+            e.to_string()
+        })?;
 
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let sync_repo_dir = app_dir.join("sync_repo");
+    tracing::info!("pull_workspace: sync_repo_dir exists: {}", sync_repo_dir.exists());
+
     let sync_service = git_ops::GitSyncService::new(&app_dir);
+    
+    tracing::info!("pull_workspace: Initializing/Opening sync repo...");
     let git_repo = sync_service
         .init_repo(&repo_info.clone_url, &token)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!("pull_workspace: Failed to init/clone repo: {}", e);
+            e.to_string()
+        })?;
 
+    tracing::info!("pull_workspace: Repo initialized. Pulling...");
     // Pull from remote (this will do a hard reset if remote is different, overwriting local JSONs)
-    sync_service.pull(&git_repo, &token).map_err(|e| e.to_string())?;
+    sync_service.pull(&git_repo, &token).map_err(|e| {
+        tracing::error!("pull_workspace: Failed to pull: {}", e);
+        e.to_string()
+    })?;
+
+    tracing::info!("pull_workspace: Pull finished. Checking for vault_sync.json...");
+    let vault_sync_path = sync_repo_dir.join("vault_sync.json");
+    tracing::info!("pull_workspace: vault_sync.json exists: {}", vault_sync_path.exists());
+
+    let vault_sync_path = app_dir.join("sync_repo/vault_sync.json");
+    if vault_sync_path.exists() {
+        tracing::info!("Synced vault found at {:?}", vault_sync_path);
+    } else {
+        tracing::info!("No synced vault found at {:?}", vault_sync_path);
+    }
 
     let workspaces_path = app_dir.join("sync_repo/workspaces.json");
     let servers_path = app_dir.join("sync_repo/servers.json");
@@ -72,15 +102,18 @@ pub async fn push_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
     _workspace_id: String,
+    provided_token: Option<String>,
 ) -> Result<(), String> {
     
     let _lock = state.sync_lock.try_lock().map_err(|_| "Sincronização já em andamento")?;
 
-    let token = {
+    let token = if let Some(t) = provided_token {
+        t
+    } else {
         let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         let token_path = app_dir.join("github_token.enc");
         let encrypted = fs::read_to_string(&token_path).map_err(|_| "Sessão não encontrada")?;
-        state.crypto.decrypt(&encrypted).map_err(|_| "Token inválido")?
+        state.crypto.decrypt(&encrypted).map_err(|_| "Token inválido ou cofre bloqueado")?
     };
 
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

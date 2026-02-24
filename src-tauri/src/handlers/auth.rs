@@ -30,6 +30,7 @@ pub fn reencrypt_token(app: &tauri::AppHandle, state: &tauri::State<'_, crate::A
 
 #[tauri::command]
 pub async fn github_login(app: tauri::AppHandle, state: tauri::State<'_, crate::AppState>) -> Result<AuthResponse, String> {
+    tracing::info!("github_login: Command invoked");
     // Em uma aplicação real, salvaríamos o access token na storage cifrada (Vault)
     match github::start_oauth_flow().await {
         Ok(token) => {
@@ -48,12 +49,12 @@ pub async fn github_login(app: tauri::AppHandle, state: tauri::State<'_, crate::
                 Ok(user) => {
                     // Após login com sucesso, garantir que o repo de sync exista (provisionamento)
                     if let Err(repo_err) = crate::sync::repo::ensure_sync_repo_exists(&token).await {
-                        println!("Failed to ensure sync repo exists: {}", repo_err);
+                        tracing::error!("Failed to ensure sync repo exists: {}", repo_err);
                         // Não falhamos o login, apenas logamos o erro (para retry posterior)
                     } else {
-                        println!("Sync repo exists, running initial sync...");
-                        if let Err(sync_err) = crate::sync::pull_workspace(app.clone(), state, "".to_string()).await {
-                            println!("Failed to run initial pull: {}", sync_err);
+                        tracing::info!("Sync repo exists, running initial sync...");
+                        if let Err(sync_err) = crate::sync::pull_workspace(app.clone(), state, "".to_string(), Some(token.clone())).await {
+                            tracing::error!("Failed to run initial pull: {}", sync_err);
                         }
                     }
                     Ok(AuthResponse { user })
@@ -80,7 +81,7 @@ pub async fn get_current_user(app: tauri::AppHandle, state: tauri::State<'_, cra
                     Ok(user) => {
                         println!("Token valid, getting current user. Running background sync...");
                         // Also trigger a background sync so workspaces populate on load
-                        if let Err(sync_err) = crate::sync::pull_workspace(app.clone(), state, "".to_string()).await {
+                        if let Err(sync_err) = crate::sync::pull_workspace(app.clone(), state, "".to_string(), None).await {
                             println!("Failed to run startup pull: {}", sync_err);
                         }
                         return Ok(Some(AuthResponse { user }));

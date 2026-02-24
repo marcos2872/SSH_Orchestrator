@@ -20,17 +20,28 @@ pub struct RepoInfo {
 }
 
 pub async fn ensure_sync_repo_exists(token: &str) -> Result<RepoInfo> {
+    tracing::info!("ensure_sync_repo_exists: Function entered");
     let client = Client::new();
     
+    tracing::info!("ensure_sync_repo_exists: Checking if user repo exists at GitHub...");
     // 1. Check if repo exists
-    let user_res = super::super::auth::github::get_user(token).await?;
+    let user_res = match super::super::auth::github::get_user(token).await {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::error!("ensure_sync_repo_exists: Failed to get user: {}", e);
+            return Err(e);
+        }
+    };
     let repo_url = format!("https://api.github.com/repos/{}/{}", user_res.login, REPO_NAME);
+    tracing::info!("ensure_sync_repo_exists: Requesting repo info from {}", repo_url);
     
     let get_res = client.get(&repo_url)
         .header("Authorization", format!("Bearer {}", token))
         .header("User-Agent", "ssh-config-sync")
         .send()
         .await?;
+    
+    tracing::info!("ensure_sync_repo_exists: GitHub response status: {}", get_res.status());
 
     if get_res.status() == StatusCode::OK {
         let repo: RepoInfo = get_res.json().await?;

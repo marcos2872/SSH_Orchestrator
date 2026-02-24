@@ -39,7 +39,13 @@ pub fn unlock_vault(state: State<'_, AppState>, password: String) -> Result<(), 
 pub fn check_synced_vault(app: tauri::AppHandle) -> Result<bool, String> {
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let vault_sync_path = app_dir.join("sync_repo/vault_sync.json");
-    Ok(vault_sync_path.exists())
+    let exists = vault_sync_path.exists();
+    tracing::info!(
+        "Checking for synced vault at {:?}. Exists: {}",
+        vault_sync_path,
+        exists
+    );
+    Ok(exists)
 }
 
 #[tauri::command]

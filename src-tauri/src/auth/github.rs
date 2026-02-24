@@ -6,14 +6,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use tokio::net::TcpListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-const GITHUB_AUTH_URL: &str = "https://github.com/login/oauth/authorize";
-const GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
-
-// NOTE: in a real application these should be securely injected, but here we can just use placeholders or env vars.
-// We'll require the user to provide a CLIENT_ID and maybe leave this as an example for now.
-// For the sake of this phase, let's assume some dummy client ID or expect it to be passed.
-const CLIENT_ID: &str = "Ov23li0ONw7OI2NxHB9T";
-const CLIENT_SECRET: &str = "afc1d02922a9819071ed042d7eae2998aed36038"; // In PKCE this wouldn't be needed for desktop apps, but standard auth requires it if not setup as public client.
+// GitHub OAuth configuration will be loaded from environment variables
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GitHubUser {
@@ -27,7 +20,9 @@ pub struct GitHubUser {
 #[derive(Deserialize, Debug)]
 struct TokenResponse {
     access_token: String,
+    #[serde(rename = "token_type")]
     _token_type: String,
+    #[serde(rename = "scope")]
     _scope: String,
 }
 
@@ -45,9 +40,28 @@ pub async fn start_oauth_flow() -> Result<String> {
     let redirect_uri = format!("http://localhost:{}/callback", port);
 
     // 3. Construct OAuth URL
-    let mut auth_url = Url::parse(GITHUB_AUTH_URL)?;
+    let auth_url_str = std::env::var("GITHUB_AUTH_URL")
+        .unwrap_or_else(|_| "https://github.com/login/oauth/authorize".to_string())
+        .trim()
+        .to_string();
+    
+    let client_id = match std::env::var("GITHUB_CLIENT_ID") {
+        Ok(id) => {
+            let trimmed = id.trim().to_string();
+            tracing::info!("Using GITHUB_CLIENT_ID from env (length: {})", trimmed.len());
+            trimmed
+        },
+        Err(e) => {
+            tracing::error!("Failed to get GITHUB_CLIENT_ID from env: {}", e);
+            return Err(anyhow::anyhow!("GITHUB_CLIENT_ID not found in environment"));
+        }
+    };
+
+    tracing::info!("Starting OAuth flow with URL: {}", auth_url_str);
+
+    let mut auth_url = Url::parse(&auth_url_str)?;
     auth_url.query_pairs_mut()
-        .append_pair("client_id", CLIENT_ID)
+        .append_pair("client_id", &client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("scope", "repo user:email")
         .append_pair("state", &state);
@@ -155,11 +169,21 @@ pub async fn start_oauth_flow() -> Result<String> {
 
     // 6. Exchange code for access token
     let client = Client::new();
-    let token_res: reqwest::Response = client.post(GITHUB_TOKEN_URL)
+    let token_url = std::env::var("GITHUB_TOKEN_URL")
+        .unwrap_or_else(|_| "https://github.com/login/oauth/access_token".to_string())
+        .trim()
+        .to_string();
+    
+    let client_id = std::env::var("GITHUB_CLIENT_ID")?.trim().to_string();
+    let client_secret = std::env::var("GITHUB_CLIENT_SECRET")?.trim().to_string();
+
+    tracing::info!("Exchanging code for token at: {}", token_url);
+
+    let token_res: reqwest::Response = client.post(token_url)
         .header("Accept", "application/json")
         .form(&[
-            ("client_id", CLIENT_ID),
-            ("client_secret", CLIENT_SECRET),
+            ("client_id", client_id.as_str()),
+            ("client_secret", client_secret.as_str()),
             ("code", &code),
             ("redirect_uri", &redirect_uri),
         ])
@@ -167,10 +191,16 @@ pub async fn start_oauth_flow() -> Result<String> {
         .await?;
 
     if token_res.status() != StatusCode::OK {
-        return Err(anyhow::anyhow!("Failed to exchange token: {}", token_res.status()));
+        let status = token_res.status();
+        let body = token_res.text().await.unwrap_or_else(|_| "Could not read body".to_string());
+        tracing::error!("Failed to exchange token. Status: {}, Body: {}", status, body);
+        return Err(anyhow::anyhow!("Failed to exchange token: {}", status));
     }
 
-    let token_data: TokenResponse = token_res.json().await?;
+    let token_data: TokenResponse = token_res.json().await.map_err(|e| {
+        tracing::error!("Failed to decode TokenResponse: {}", e);
+        anyhow::anyhow!("Failed to decode response: {}", e)
+    })?;
 
     Ok(token_data.access_token)
 }

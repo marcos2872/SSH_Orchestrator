@@ -19,11 +19,17 @@ impl GitSyncService {
         let repo_path = Path::new(&self.local_path);
 
         if repo_path.exists() {
-            // Open existing
+            tracing::info!(
+                "GitSyncService: sync_repo exists at {:?}, opening...",
+                repo_path
+            );
             let repo = Repository::open(repo_path)?;
             Ok(repo)
         } else {
-            // Clone
+            tracing::info!(
+                "GitSyncService: sync_repo does not exist, cloning from {}...",
+                clone_url
+            );
             let mut callbacks = RemoteCallbacks::new();
             callbacks.credentials(|_url, _username_from_url, _allowed_types| {
                 Cred::userpass_plaintext("oauth2", token)
@@ -35,7 +41,17 @@ impl GitSyncService {
             let mut builder = git2::build::RepoBuilder::new();
             builder.fetch_options(fetch_options);
 
-            let repo = builder.clone(clone_url, repo_path)?;
+            tracing::info!("GitSyncService: Starting clone...");
+            let repo = match builder.clone(clone_url, repo_path) {
+                Ok(r) => {
+                    tracing::info!("GitSyncService: Clone successful!");
+                    r
+                }
+                Err(e) => {
+                    tracing::error!("GitSyncService: Clone failed: {}", e);
+                    return Err(e.into());
+                }
+            };
             Ok(repo)
         }
     }
