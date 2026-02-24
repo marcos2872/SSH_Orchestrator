@@ -37,6 +37,12 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
 
     useEffect(() => {
         loadServers();
+
+        const handleUpdate = () => {
+            loadServers();
+        };
+        window.addEventListener('workspaces-updated', handleUpdate);
+        return () => window.removeEventListener('workspaces-updated', handleUpdate);
     }, [workspace.id]);
 
     useEffect(() => {
