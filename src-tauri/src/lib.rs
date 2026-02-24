@@ -1,11 +1,13 @@
 use crate::services::crypto::CryptoService;
 use crate::services::db::DbService;
+use crate::services::sftp::SftpService;
 use crate::services::ssh::SshService;
 use tauri::Manager;
 
 pub struct AppState {
     pub db: DbService,
     pub ssh: SshService,
+    pub sftp: SftpService,
     pub crypto: CryptoService,
     pub sync_lock: tokio::sync::Mutex<()>,
 }
@@ -26,7 +28,7 @@ pub fn run() {
 
                 tracing::info!("Initializing database at {:?}", app_dir);
                 let db = DbService::new(&handle).await.expect("failed to init db");
-                
+
                 tracing::info!("Initializing crypto service (Vault)");
                 let crypto = CryptoService::new(&app_dir).expect("failed to init crypto");
 
@@ -34,6 +36,7 @@ pub fn run() {
                 handle.manage(AppState {
                     db,
                     ssh: SshService::new(),
+                    sftp: SftpService::new(),
                     crypto,
                     sync_lock: tokio::sync::Mutex::new(()),
                 });
@@ -54,6 +57,14 @@ pub fn run() {
             handlers::ssh::ssh_connect,
             handlers::ssh::ssh_write,
             handlers::ssh::ssh_disconnect,
+            handlers::sftp::sftp_open_session,
+            handlers::sftp::sftp_list_dir,
+            handlers::sftp::sftp_upload,
+            handlers::sftp::sftp_download,
+            handlers::sftp::sftp_delete,
+            handlers::sftp::sftp_rename,
+            handlers::sftp::sftp_mkdir,
+            handlers::sftp::sftp_close_session,
             handlers::vault::is_vault_configured,
             handlers::vault::is_vault_locked,
             handlers::vault::unlock_vault,

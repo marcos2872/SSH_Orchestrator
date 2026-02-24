@@ -6,14 +6,15 @@ use russh::{
     keys::PublicKey,
     ChannelMsg, Disconnect,
 };
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
 // ─── Minimal russh client handler ─────────────────────────────────────────────
 // Data routing is handled by the channel.wait() loop below, not the handler.
 
-struct SshClientHandler;
+pub struct SshClientHandler;
 
 impl client::Handler for SshClientHandler {
     type Error = russh::Error;
@@ -31,8 +32,8 @@ impl client::Handler for SshClientHandler {
 // ─── Session state ────────────────────────────────────────────────────────────
 
 struct SshSession {
-    /// Used for clean disconnection
-    handle: Handle<SshClientHandler>,
+    /// Used for clean disconnection and SFTP channel sharing
+    handle: Arc<Mutex<Handle<SshClientHandler>>>,
     /// Send bytes here to write them to the remote shell
     writer_tx: mpsc::UnboundedSender<Vec<u8>>,
 }
@@ -48,6 +49,11 @@ impl SshService {
         Self {
             sessions: DashMap::new(),
         }
+    }
+
+    /// Return an Arc clone of the SSH Handle for a session (used to open SFTP sub-channels).
+    pub async fn get_handle(&self, session_id: &str) -> Option<Arc<Mutex<Handle<SshClientHandler>>>> {
+        self.sessions.get(session_id).map(|s| Arc::clone(&s.handle))
     }
 
     /// Establish an SSH session with password auth, open an interactive PTY shell,
@@ -146,7 +152,7 @@ impl SshService {
 
         self.sessions.insert(
             session_id.clone(),
-            SshSession { handle, writer_tx },
+            SshSession { handle: Arc::new(Mutex::new(handle)), writer_tx },
         );
 
         Ok(session_id)
@@ -173,6 +179,8 @@ impl SshService {
             drop(session.writer_tx);
             let _ = session
                 .handle
+                .lock()
+                .await
                 .disconnect(Disconnect::ByApplication, "User closed terminal", "en")
                 .await;
         }

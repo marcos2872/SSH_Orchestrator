@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod server;
+pub mod sftp;
 pub mod ssh;
 pub mod vault;
 pub mod workspace;
