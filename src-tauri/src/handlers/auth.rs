@@ -34,6 +34,11 @@ pub async fn github_login(app: tauri::AppHandle, state: tauri::State<'_, crate::
                     if let Err(repo_err) = crate::sync::repo::ensure_sync_repo_exists(&token).await {
                         println!("Failed to ensure sync repo exists: {}", repo_err);
                         // Não falhamos o login, apenas logamos o erro (para retry posterior)
+                    } else {
+                        println!("Sync repo exists, running initial sync...");
+                        if let Err(sync_err) = crate::sync::sync_workspace(app.clone(), state, "".to_string()).await {
+                            println!("Failed to run initial sync: {}", sync_err);
+                        }
                     }
                     Ok(AuthResponse { user })
                 },
@@ -56,7 +61,14 @@ pub async fn get_current_user(app: tauri::AppHandle, state: tauri::State<'_, cra
                     *guard = Some(token.clone());
                 }
                 match github::get_user(&token).await {
-                    Ok(user) => return Ok(Some(AuthResponse { user })),
+                    Ok(user) => {
+                        println!("Token valid, getting current user. Running background sync...");
+                        // Also trigger a background sync so workspaces populate on load
+                        if let Err(sync_err) = crate::sync::sync_workspace(app.clone(), state, "".to_string()).await {
+                            println!("Failed to run startup sync: {}", sync_err);
+                        }
+                        return Ok(Some(AuthResponse { user }));
+                    },
                     Err(_) => return Ok(None),
                 }
             }
