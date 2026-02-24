@@ -12,9 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "ssh",
-        "width": 800,
-        "height": 600
+        "title": "SSH Orchestrator",
+        "width": 1024,
+        "height": 680,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": false
       }
     ],
     "security": {

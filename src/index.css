@@ -12,3 +12,93 @@ body {
   background-color: #0f172a;
   color: #f8fafc;
 }
+
+/* ─── Custom TitleBar ─────────────────────────────────────────── */
+:root {
+  --titlebar-bg: #0b1120;
+  --titlebar-border: rgba(99, 136, 255, 0.12);
+  --titlebar-height: 38px;
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--titlebar-height);
+  min-height: var(--titlebar-height);
+  background: var(--titlebar-bg);
+  border-bottom: 1px solid var(--titlebar-border);
+  user-select: none;
+  position: relative;
+  z-index: 9999;
+  padding: 0 6px 0 12px;
+  flex-shrink: 0;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+
+.titlebar-icon {
+  display: flex;
+  align-items: center;
+  color: #6388ff;
+  opacity: 0.85;
+}
+
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.titlebar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  color: #475569;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+}
+
+.titlebar-btn:hover {
+  color: #e2e8f0;
+}
+
+.titlebar-btn-minimize:hover {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+.titlebar-btn-maximize:hover {
+  background: rgba(52, 211, 153, 0.18);
+  color: #34d399;
+}
+
+.titlebar-btn-close:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+
+.titlebar-btn:active {
+  opacity: 0.75;
+}
+/* ────────────────────────────────────────────────────────────── */
+
