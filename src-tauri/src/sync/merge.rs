@@ -29,15 +29,12 @@ pub struct CRDTServer {
     pub deleted: bool,
 }
 
-pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Vec<CRDTWorkspace>) -> Result<Vec<CRDTWorkspace>> {
-    let mut resolved_workspaces = Vec::new();
-    
-    // Fetch local workspaces (including deleted ones)
+pub async fn get_local_workspaces(state: &State<'_, AppState>) -> Result<Vec<CRDTWorkspace>> {
     let local_workspaces = sqlx::query("SELECT * FROM workspaces")
         .fetch_all(&state.db.pool)
         .await?;
         
-    let mut local_map = std::collections::HashMap::new();
+    let mut results = Vec::new();
     for row in local_workspaces {
         let id: Uuid = row.get("id");
         let id_str = id.to_string();
@@ -47,9 +44,21 @@ pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Ve
         let hlc: String = row.get("hlc");
         let deleted: bool = row.get("deleted");
         
-        local_map.insert(id_str.clone(), CRDTWorkspace {
+        results.push(CRDTWorkspace {
             id: id_str, name, color, sync_enabled, hlc, deleted
         });
+    }
+    Ok(results)
+}
+
+pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Vec<CRDTWorkspace>) -> Result<Vec<CRDTWorkspace>> {
+    let mut resolved_workspaces = Vec::new();
+    
+    let local_workspaces = get_local_workspaces(state).await?;
+        
+    let mut local_map = std::collections::HashMap::new();
+    for ws in local_workspaces {
+        local_map.insert(ws.id.clone(), ws);
     }
 
     // Unconditionally apply remote state
@@ -99,15 +108,12 @@ pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Ve
 }
 
 
-pub async fn merge_servers(state: &State<'_, AppState>, remote_servers: Vec<CRDTServer>) -> Result<Vec<CRDTServer>> {
-    let mut resolved_servers = Vec::new();
-    
-    // Fetch local servers (including deleted ones)
+pub async fn get_local_servers(state: &State<'_, AppState>) -> Result<Vec<CRDTServer>> {
     let local_servers = sqlx::query("SELECT * FROM servers")
         .fetch_all(&state.db.pool)
         .await?;
         
-    let mut local_map = std::collections::HashMap::new();
+    let mut results = Vec::new();
     for row in local_servers {
         let id: Uuid = row.get("id");
         let id_str = id.to_string();
@@ -122,9 +128,21 @@ pub async fn merge_servers(state: &State<'_, AppState>, remote_servers: Vec<CRDT
         let hlc: String = row.get("hlc");
         let deleted: bool = row.get("deleted");
         
-        local_map.insert(id_str.clone(), CRDTServer {
+        results.push(CRDTServer {
             id: id_str, workspace_id: workspace_id_str, name, host, port: port as u16, username, tags, password_enc, hlc, deleted
         });
+    }
+    Ok(results)
+}
+
+pub async fn merge_servers(state: &State<'_, AppState>, remote_servers: Vec<CRDTServer>) -> Result<Vec<CRDTServer>> {
+    let mut resolved_servers = Vec::new();
+    
+    let local_servers = get_local_servers(state).await?;
+        
+    let mut local_map = std::collections::HashMap::new();
+    for srv in local_servers {
+        local_map.insert(srv.id.clone(), srv);
     }
 
     for remote in remote_servers {

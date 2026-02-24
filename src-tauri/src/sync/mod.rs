@@ -102,14 +102,13 @@ pub async fn push_workspace(
     // Now, we regenerate the JSON files strictly from the local database,
     // overwriting whatever we just pulled if necessary.
     
-    // We pass empty vecs as "remote" to merge_X because we just want them to return 
-    // the local database serialized. The merge functions are designed to return the 
-    // combined state. Since remote is empty, they just return local DB.
-    let resolved_workspaces = merge::merge_workspaces(&state, Vec::new())
+    // We call get_local_workspaces and get_local_servers to strictly serialize the local DB
+    // instead of calling merge routines which would mistakenly delete records.
+    let resolved_workspaces = merge::get_local_workspaces(&state)
         .await
         .map_err(|e| e.to_string())?;
 
-    let resolved_servers = merge::merge_servers(&state, Vec::new())
+    let resolved_servers = merge::get_local_servers(&state)
         .await
         .map_err(|e| e.to_string())?;
 
