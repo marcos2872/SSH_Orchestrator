@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { sshConnect, sshWrite, sshDisconnect } from '../../lib/api/ssh';
 import { Terminal as XTerm, IDisposable } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
@@ -81,7 +81,7 @@ const Terminal: React.FC<Props> = ({ server, onClose }) => {
                     .map(b => String.fromCharCode(b))
                     .join('')
             );
-            invoke('ssh_write', { sessionId: sid, data: encoded }).catch(() => { });
+            sshWrite(sid, encoded).catch(() => { });
         });
 
         const onResize = () => fit.fit();
@@ -127,7 +127,7 @@ const Terminal: React.FC<Props> = ({ server, onClose }) => {
         unlistenCloseRef.current = null;
 
         if (sessionIdRef.current) {
-            await invoke('ssh_disconnect', { sessionId: sessionIdRef.current }).catch(() => { });
+            await sshDisconnect(sessionIdRef.current).catch(() => { });
             sessionIdRef.current = null;
         }
     };
@@ -144,10 +144,7 @@ const Terminal: React.FC<Props> = ({ server, onClose }) => {
         }
 
         try {
-            const sessionId = await invoke<string>('ssh_connect', {
-                serverId: server.id,
-                password: pw,
-            });
+            const sessionId = await sshConnect(server.id, pw);
             sessionIdRef.current = sessionId;
 
             // Incoming data from server → write to xterm

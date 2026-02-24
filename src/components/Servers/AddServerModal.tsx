@@ -1,16 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { X, Eye, EyeOff, Server, Lock } from 'lucide-react';
+import { createServer, updateServer, Server } from '../../lib/api/servers';
+import { X, Eye, EyeOff, Server as ServerIcon, Lock } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
-
-interface Server {
-    id: string;
-    name: string;
-    host: string;
-    port: number;
-    username: string;
-    has_saved_password: boolean;
-}
 
 interface Props {
     workspaceId: string;
@@ -47,26 +38,26 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
         setSaving(true);
         try {
             if (isEdit) {
-                await invoke('update_server', {
-                    id: server!.id,
-                    name: name.trim(),
-                    host: host.trim(),
+                await updateServer(
+                    server!.id,
+                    name.trim(),
+                    host.trim(),
                     port,
-                    username: username.trim(),
-                    password: password || null,
+                    username.trim(),
+                    password || null,
                     savePassword,
-                });
+                );
                 toast.success('Servidor atualizado!');
             } else {
-                await invoke('create_server', {
+                await createServer(
                     workspaceId,
-                    name: name.trim(),
-                    host: host.trim(),
+                    name.trim(),
+                    host.trim(),
                     port,
-                    username: username.trim(),
-                    password: password || null,
+                    username.trim(),
+                    password || null,
                     savePassword,
-                });
+                );
                 toast.success('Servidor criado!');
             }
             onSaved();
@@ -84,7 +75,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-blue-500/10 rounded-lg">
-                            <Server className="w-5 h-5 text-blue-400" />
+                            <ServerIcon className="w-5 h-5 text-blue-400" />
                         </div>
                         <h2 className="text-lg font-semibold">
                             {isEdit ? 'Editar Servidor' : 'Novo Servidor'}

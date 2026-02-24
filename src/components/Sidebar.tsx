@@ -1,13 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { Workspace, getWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace } from '../lib/api/workspaces';
 import { Plus, Server, Folder, Activity, MoreHorizontal, Pencil, Trash2, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
-
-interface Workspace {
-    id: string;
-    name: string;
-    color: string;
-}
 
 interface Props {
     onSelectWorkspace: (ws: Workspace | null) => void;
@@ -39,7 +33,7 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
 
     const loadWorkspaces = async () => {
         try {
-            const res = await invoke<Workspace[]>('get_workspaces');
+            const res = await getWorkspaces();
             setWorkspaces(res);
         } catch (err) {
             toast.error(`Erro ao carregar workspaces: ${err}`);
@@ -48,7 +42,7 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
 
     const handleCreateWorkspace = async () => {
         try {
-            await invoke('create_workspace', { name: 'Novo Workspace', color: '#3b82f6' });
+            await createWorkspace('Novo Workspace', '#3b82f6');
             loadWorkspaces();
             // Auto-expand when creating
             setCollapsed(false);
@@ -68,7 +62,7 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
     const handleSaveEdit = async () => {
         if (!editingId) return;
         try {
-            await invoke('update_workspace', { id: editingId, name: editName, color: editColor });
+            await updateWorkspace(editingId, editName, editColor);
             const updated = workspaces.find(w => w.id === editingId);
             if (updated && selectedId === editingId) {
                 onSelectWorkspace({ ...updated, name: editName, color: editColor });
@@ -84,7 +78,7 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
 
     const handleDeleteWorkspace = async (id: string) => {
         try {
-            await invoke('delete_workspace', { id });
+            await deleteWorkspace(id);
             if (selectedId === id) onSelectWorkspace(null);
             await loadWorkspaces();
             toast.success('Workspace excluído.');

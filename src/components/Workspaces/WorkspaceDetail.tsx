@@ -1,20 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { updateWorkspace, deleteWorkspace } from '../../lib/api/workspaces';
+import { Server, getServers, deleteServer } from '../../lib/api/servers';
 import {
     Monitor, Plus, Settings, Shield, Terminal as TerminalIcon,
     HardDrive, X, Trash2, Save, Pencil, Lock
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import AddServerModal from '../Servers/AddServerModal';
-
-interface Server {
-    id: string;
-    name: string;
-    host: string;
-    port: number;
-    username: string;
-    has_saved_password: boolean;
-}
 
 interface Props {
     workspace: { id: string; name: string; color: string };
@@ -54,7 +46,7 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
     const loadServers = async () => {
         setLoading(true);
         try {
-            const res = await invoke<Server[]>('get_servers', { workspaceId: workspace.id });
+            const res = await getServers(workspace.id);
             setServers(res);
         } catch (err) {
             toast.error(`Erro ao carregar servidores: ${err}`);
@@ -65,7 +57,7 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
 
     const handleDeleteServer = async (id: string) => {
         try {
-            await invoke('delete_server', { id });
+            await deleteServer(id);
             setConfirmDeleteServerId(null);
             toast.success('Servidor excluído.');
             await loadServers();
@@ -77,7 +69,7 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
     const handleSaveWorkspace = async () => {
         setSavingWs(true);
         try {
-            await invoke('update_workspace', { id: workspace.id, name: wsName, color: wsColor });
+            await updateWorkspace(workspace.id, wsName, wsColor);
             onWorkspaceUpdated({ id: workspace.id, name: wsName, color: wsColor });
             toast.success('Workspace atualizado!');
             setShowSettings(false);
@@ -90,7 +82,7 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
 
     const handleDeleteWorkspace = async () => {
         try {
-            await invoke('delete_workspace', { id: workspace.id });
+            await deleteWorkspace(workspace.id);
             toast.success('Workspace excluído.');
             onWorkspaceDeleted();
         } catch (err) {
