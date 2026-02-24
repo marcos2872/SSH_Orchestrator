@@ -42,19 +42,9 @@ pub async fn start_oauth_flow() -> Result<String> {
     // 3. Construct OAuth URL
     let auth_url_str = "https://github.com/login/oauth/authorize".to_string();
     
-    let client_id = match std::env::var("GH_CLIENT_ID") {
-        Ok(id) => {
-            let trimmed = id.trim().to_string();
-            tracing::info!("Using GH_CLIENT_ID from env (length: {})", trimmed.len());
-            trimmed
-        },
-        Err(e) => {
-            tracing::error!("Failed to get GH_CLIENT_ID from env: {}", e);
-            return Err(anyhow::anyhow!("GH_CLIENT_ID not found in environment"));
-        }
-    };
+    let client_id = env!("GH_CLIENT_ID").trim().to_string();
 
-    tracing::info!("Starting OAuth flow with URL: {}", auth_url_str);
+    tracing::info!("Starting OAuth flow with client_id length: {}", client_id.len());
 
     let mut auth_url = Url::parse(&auth_url_str)?;
     auth_url.query_pairs_mut()
@@ -168,8 +158,8 @@ pub async fn start_oauth_flow() -> Result<String> {
     let client = Client::new();
     let token_url = "https://github.com/login/oauth/access_token".to_string();
     
-    let client_id = std::env::var("GH_CLIENT_ID")?.trim().to_string();
-    let client_secret = std::env::var("GH_CLIENT_SECRET")?.trim().to_string();
+    let client_id = env!("GH_CLIENT_ID").trim().to_string();
+    let client_secret = env!("GH_CLIENT_SECRET").trim().to_string();
 
     tracing::info!("Exchanging code for token at: {}", token_url);
 
