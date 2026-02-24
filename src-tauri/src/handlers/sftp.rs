@@ -163,3 +163,37 @@ pub async fn sftp_close_session(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn sftp_delete_local(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    state
+        .sftp
+        .delete_local(&path)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn sftp_rename_local(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> Result<(), String> {
+    state
+        .sftp
+        .rename_local(&from, &to)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn sftp_mkdir_local(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    state
+        .sftp
+        .mkdir_local(&path)
+        .map_err(|e| e.to_string())
+}

@@ -129,6 +129,29 @@ impl SftpService {
         Ok(entries)
     }
 
+    /// Delete a local file or directory.
+    pub fn delete_local(&self, path: &str) -> Result<()> {
+        let p = std::path::Path::new(path);
+        if p.is_dir() {
+            std::fs::remove_dir_all(p)?;
+        } else {
+            std::fs::remove_file(p)?;
+        }
+        Ok(())
+    }
+
+    /// Rename a local file or directory.
+    pub fn rename_local(&self, from: &str, to: &str) -> Result<()> {
+        std::fs::rename(from, to)?;
+        Ok(())
+    }
+
+    /// Create a local directory.
+    pub fn mkdir_local(&self, path: &str) -> Result<()> {
+        std::fs::create_dir_all(path)?;
+        Ok(())
+    }
+
     /// List directory contents.
     pub async fn list_dir(&self, session_id: &str, path: &str) -> Result<Vec<SftpEntry>> {
         let guard = self.sessions.get(session_id)

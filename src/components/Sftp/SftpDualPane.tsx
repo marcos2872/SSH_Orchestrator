@@ -2,10 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     sftpDirectConnect, sftpListDir, sftpListLocal, sftpUpload, sftpDownload,
     sftpCloseSession, sftpWorkdir, sftpHomeDir, onSftpProgress,
+    sftpDelete, sftpRename, sftpMkdir,
+    sftpDeleteLocal, sftpRenameLocal, sftpMkdirLocal,
     type SftpEntry, type LocalEntry, type SftpProgress,
 } from '../../lib/api/sftp';
 import { getServerPassword } from '../../lib/api/servers';
 import type { Server } from '../../hooks/useTerminalManager';
+import { FolderPlus, Trash2, Pencil, RefreshCw } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,12 +50,17 @@ interface PaneProps {
     onDragStart: (item: DragItem) => void;
     onDrop: (target: 'local' | 'remote', targetDir: string) => void;
     onDragOver: (e: React.DragEvent, side: 'local' | 'remote') => void;
+    onRename: (path: string) => void;
+    onDelete: (path: string) => void;
+    onMkdir: () => void;
+    onRefresh: () => void;
 }
 
 const FilePane: React.FC<PaneProps> = ({
     title, icon, cwd, entries, loading, error, side,
     dropTarget, selected, onSelect, onNavigate,
     onDragStart, onDrop, onDragOver,
+    onRename, onDelete, onMkdir, onRefresh,
 }) => {
     const parent = cwd.split('/').slice(0, -1).join('/') || '/';
     const segments = cwd.split('/').filter(Boolean);
@@ -64,9 +72,44 @@ const FilePane: React.FC<PaneProps> = ({
             onDrop={() => onDrop(side, cwd)}
         >
             {/* Header */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
-                <span className="text-base">{icon}</span>
-                <span className="text-xs font-semibold text-slate-300">{title}</span>
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
+                <div className="flex items-center gap-2">
+                    <span className="text-base">{icon}</span>
+                    <span className="text-xs font-semibold text-slate-300">{title}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={onMkdir}
+                        title="Nova Pasta"
+                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-sky-400 transition-colors"
+                    >
+                        <FolderPlus size={14} />
+                    </button>
+                    <button
+                        onClick={() => selected && onRename(selected)}
+                        disabled={!selected}
+                        title="Renomear"
+                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-sky-400 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                    >
+                        <Pencil size={14} />
+                    </button>
+                    <button
+                        onClick={() => selected && onDelete(selected)}
+                        disabled={!selected}
+                        title="Deletar"
+                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-red-400 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                    <div className="w-px h-3 bg-slate-800 mx-1" />
+                    <button
+                        onClick={onRefresh}
+                        title="Sincronizar"
+                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-sky-400 transition-colors"
+                    >
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
             </div>
 
             {/* Breadcrumb */}
@@ -336,6 +379,87 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         setDragging(null);
     }, [dragging, sftp, remoteCwd, localCwd, listRemote, listLocal]);
 
+    // ── Local Actions ──────────────────────────────────────────────────────────
+    const handleLocalRename = useCallback(async (path: string) => {
+        const name = path.split('/').pop();
+        const newName = window.prompt('Novo nome:', name);
+        if (!newName || newName === name) return;
+        const parent = path.split('/').slice(0, -1).join('/') || '/';
+        const newPath = `${parent.replace(/\/$/, '')}/${newName}`;
+        try {
+            await sftpRenameLocal(path, newPath);
+            await listLocal(localCwd);
+        } catch (e) {
+            setLocalError(`Renomear falhou: ${String(e)}`);
+        }
+    }, [localCwd, listLocal]);
+
+    const handleLocalDelete = useCallback(async (path: string) => {
+        const name = path.split('/').pop();
+        if (!window.confirm(`Tem certeza que deseja deletar "${name}"?`)) return;
+        try {
+            await sftpDeleteLocal(path);
+            setLocalSelected(null);
+            await listLocal(localCwd);
+        } catch (e) {
+            setLocalError(`Deletar falhou: ${String(e)}`);
+        }
+    }, [localCwd, listLocal]);
+
+    const handleLocalMkdir = useCallback(async () => {
+        const name = window.prompt('Nome da nova pasta:');
+        if (!name) return;
+        const path = `${localCwd.replace(/\/$/, '')}/${name}`;
+        try {
+            await sftpMkdirLocal(path);
+            await listLocal(localCwd);
+        } catch (e) {
+            setLocalError(`Criar pasta falhou: ${String(e)}`);
+        }
+    }, [localCwd, listLocal]);
+
+    // ── Remote Actions ─────────────────────────────────────────────────────────
+    const handleRemoteRename = useCallback(async (path: string) => {
+        if (!sftp) return;
+        const name = path.split('/').pop();
+        const newName = window.prompt('Novo nome:', name);
+        if (!newName || newName === name) return;
+        const parent = path.split('/').slice(0, -1).join('/') || '/';
+        const newPath = `${parent.replace(/\/$/, '')}/${newName}`;
+        try {
+            await sftpRename(sftp, path, newPath);
+            await listRemotePath(remoteCwd);
+        } catch (e) {
+            setRemoteError(`Renomear falhou: ${String(e)}`);
+        }
+    }, [sftp, remoteCwd, listRemotePath]);
+
+    const handleRemoteDelete = useCallback(async (path: string) => {
+        if (!sftp) return;
+        const name = path.split('/').pop();
+        if (!window.confirm(`Tem certeza que deseja deletar "${name}"?`)) return;
+        try {
+            await sftpDelete(sftp, path);
+            setRemoteSelected(null);
+            await listRemotePath(remoteCwd);
+        } catch (e) {
+            setRemoteError(`Deletar falhou: ${String(e)}`);
+        }
+    }, [sftp, remoteCwd, listRemotePath]);
+
+    const handleRemoteMkdir = useCallback(async () => {
+        if (!sftp) return;
+        const name = window.prompt('Nome da nova pasta:');
+        if (!name) return;
+        const path = `${remoteCwd.replace(/\/$/, '')}/${name}`;
+        try {
+            await sftpMkdir(sftp, path);
+            await listRemotePath(remoteCwd);
+        } catch (e) {
+            setRemoteError(`Criar pasta falhou: ${String(e)}`);
+        }
+    }, [sftp, remoteCwd, listRemotePath]);
+
 
     // ── Render ────────────────────────────────────────────────────────────────
 
@@ -396,6 +520,10 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
+                        onRename={handleLocalRename}
+                        onDelete={handleLocalDelete}
+                        onMkdir={handleLocalMkdir}
+                        onRefresh={() => listLocal(localCwd)}
                     />
                 </div>
 
@@ -444,6 +572,10 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
+                        onRename={handleRemoteRename}
+                        onDelete={handleRemoteDelete}
+                        onMkdir={handleRemoteMkdir}
+                        onRefresh={() => listRemotePath(remoteCwd)}
                     />
                 </div>
             </div>

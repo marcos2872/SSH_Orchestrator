@@ -68,3 +68,12 @@ export const sftpWorkdir = (sessionId: string) =>
 /** Get the local home directory ($HOME). */
 export const sftpHomeDir = () =>
     invoke<string>('sftp_home_dir');
+
+export const sftpDeleteLocal = (path: string) =>
+    invoke<void>('sftp_delete_local', { path });
+
+export const sftpRenameLocal = (from: string, to: string) =>
+    invoke<void>('sftp_rename_local', { from, to });
+
+export const sftpMkdirLocal = (path: string) =>
+    invoke<void>('sftp_mkdir_local', { path });
