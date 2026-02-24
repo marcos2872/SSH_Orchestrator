@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Modal from '../Modal';
 import {
     sftpDirectConnect, sftpListDir, sftpListLocal, sftpUpload, sftpDownload,
     sftpCloseSession, sftpWorkdir, sftpHomeDir, onSftpProgress,
@@ -218,6 +219,24 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
     // Transfer status
     const [progress, setProgress] = useState<SftpProgress | null>(null);
 
+    // Modal state
+    interface ModalState {
+        isOpen: boolean;
+        type: 'rename' | 'delete' | 'mkdir';
+        side: 'local' | 'remote';
+        targetPath?: string;
+        inputValue: string;
+        description: string;
+    }
+
+    const [modal, setModal] = useState<ModalState>({
+        isOpen: false,
+        type: 'mkdir',
+        side: 'local',
+        inputValue: '',
+        description: '',
+    });
+
     // Track connection attempt to avoid loops
     const connectAttempted = useRef(false);
 
@@ -379,86 +398,117 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         setDragging(null);
     }, [dragging, sftp, remoteCwd, localCwd, listRemote, listLocal]);
 
+    const handleConfirmModal = async (value: string) => {
+        const { type, side, targetPath } = modal;
+        setModal(prev => ({ ...prev, isOpen: false }));
+
+        try {
+            if (side === 'local') {
+                if (type === 'rename' && targetPath) {
+                    const parent = targetPath.split('/').slice(0, -1).join('/') || '/';
+                    const newPath = `${parent.replace(/\/$/, '')}/${value}`;
+                    await sftpRenameLocal(targetPath, newPath);
+                } else if (type === 'delete' && targetPath) {
+                    await sftpDeleteLocal(targetPath);
+                    setLocalSelected(null);
+                } else if (type === 'mkdir') {
+                    const path = `${localCwd.replace(/\/$/, '')}/${value}`;
+                    await sftpMkdirLocal(path);
+                }
+                await listLocal(localCwd);
+            } else {
+                if (!sftp) return;
+                if (type === 'rename' && targetPath) {
+                    const parent = targetPath.split('/').slice(0, -1).join('/') || '/';
+                    const newPath = `${parent.replace(/\/$/, '')}/${value}`;
+                    await sftpRename(sftp, targetPath, newPath);
+                } else if (type === 'delete' && targetPath) {
+                    await sftpDelete(sftp, targetPath);
+                    setRemoteSelected(null);
+                } else if (type === 'mkdir') {
+                    const path = `${remoteCwd.replace(/\/$/, '')}/${value}`;
+                    await sftpMkdir(sftp, path);
+                }
+                await listRemotePath(remoteCwd);
+            }
+        } catch (e) {
+            const err = String(e);
+            if (side === 'local') setLocalError(err);
+            else setRemoteError(err);
+        }
+    };
+
     // ── Local Actions ──────────────────────────────────────────────────────────
-    const handleLocalRename = useCallback(async (path: string) => {
-        const name = path.split('/').pop();
-        const newName = window.prompt('Novo nome:', name);
-        if (!newName || newName === name) return;
-        const parent = path.split('/').slice(0, -1).join('/') || '/';
-        const newPath = `${parent.replace(/\/$/, '')}/${newName}`;
-        try {
-            await sftpRenameLocal(path, newPath);
-            await listLocal(localCwd);
-        } catch (e) {
-            setLocalError(`Renomear falhou: ${String(e)}`);
-        }
-    }, [localCwd, listLocal]);
+    const handleLocalRename = useCallback((path: string) => {
+        const name = path.split('/').pop() || '';
+        setModal({
+            isOpen: true,
+            type: 'rename',
+            side: 'local',
+            targetPath: path,
+            inputValue: name,
+            description: `Renomear "${name}" para:`,
+        });
+    }, []);
 
-    const handleLocalDelete = useCallback(async (path: string) => {
-        const name = path.split('/').pop();
-        if (!window.confirm(`Tem certeza que deseja deletar "${name}"?`)) return;
-        try {
-            await sftpDeleteLocal(path);
-            setLocalSelected(null);
-            await listLocal(localCwd);
-        } catch (e) {
-            setLocalError(`Deletar falhou: ${String(e)}`);
-        }
-    }, [localCwd, listLocal]);
+    const handleLocalDelete = useCallback((path: string) => {
+        const name = path.split('/').pop() || '';
+        setModal({
+            isOpen: true,
+            type: 'delete',
+            side: 'local',
+            targetPath: path,
+            inputValue: '',
+            description: `Tem certeza que deseja deletar "${name}"?`,
+        });
+    }, []);
 
-    const handleLocalMkdir = useCallback(async () => {
-        const name = window.prompt('Nome da nova pasta:');
-        if (!name) return;
-        const path = `${localCwd.replace(/\/$/, '')}/${name}`;
-        try {
-            await sftpMkdirLocal(path);
-            await listLocal(localCwd);
-        } catch (e) {
-            setLocalError(`Criar pasta falhou: ${String(e)}`);
-        }
-    }, [localCwd, listLocal]);
+    const handleLocalMkdir = useCallback(() => {
+        setModal({
+            isOpen: true,
+            type: 'mkdir',
+            side: 'local',
+            targetPath: '',
+            inputValue: '',
+            description: 'Nome da nova pasta:',
+        });
+    }, []);
 
     // ── Remote Actions ─────────────────────────────────────────────────────────
-    const handleRemoteRename = useCallback(async (path: string) => {
-        if (!sftp) return;
-        const name = path.split('/').pop();
-        const newName = window.prompt('Novo nome:', name);
-        if (!newName || newName === name) return;
-        const parent = path.split('/').slice(0, -1).join('/') || '/';
-        const newPath = `${parent.replace(/\/$/, '')}/${newName}`;
-        try {
-            await sftpRename(sftp, path, newPath);
-            await listRemotePath(remoteCwd);
-        } catch (e) {
-            setRemoteError(`Renomear falhou: ${String(e)}`);
-        }
-    }, [sftp, remoteCwd, listRemotePath]);
+    const handleRemoteRename = useCallback((path: string) => {
+        const name = path.split('/').pop() || '';
+        setModal({
+            isOpen: true,
+            type: 'rename',
+            side: 'remote',
+            targetPath: path,
+            inputValue: name,
+            description: `Renomear "${name}" para:`,
+        });
+    }, []);
 
-    const handleRemoteDelete = useCallback(async (path: string) => {
-        if (!sftp) return;
-        const name = path.split('/').pop();
-        if (!window.confirm(`Tem certeza que deseja deletar "${name}"?`)) return;
-        try {
-            await sftpDelete(sftp, path);
-            setRemoteSelected(null);
-            await listRemotePath(remoteCwd);
-        } catch (e) {
-            setRemoteError(`Deletar falhou: ${String(e)}`);
-        }
-    }, [sftp, remoteCwd, listRemotePath]);
+    const handleRemoteDelete = useCallback((path: string) => {
+        const name = path.split('/').pop() || '';
+        setModal({
+            isOpen: true,
+            type: 'delete',
+            side: 'remote',
+            targetPath: path,
+            inputValue: '',
+            description: `Tem certeza que deseja deletar "${name}"?`,
+        });
+    }, []);
 
-    const handleRemoteMkdir = useCallback(async () => {
-        if (!sftp) return;
-        const name = window.prompt('Nome da nova pasta:');
-        if (!name) return;
-        const path = `${remoteCwd.replace(/\/$/, '')}/${name}`;
-        try {
-            await sftpMkdir(sftp, path);
-            await listRemotePath(remoteCwd);
-        } catch (e) {
-            setRemoteError(`Criar pasta falhou: ${String(e)}`);
-        }
-    }, [sftp, remoteCwd, listRemotePath]);
+    const handleRemoteMkdir = useCallback(() => {
+        setModal({
+            isOpen: true,
+            type: 'mkdir',
+            side: 'remote',
+            targetPath: '',
+            inputValue: '',
+            description: 'Nome da nova pasta:',
+        });
+    }, []);
 
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -597,6 +647,51 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                     </div>
                 </div>
             )}
+
+            <Modal
+                isOpen={modal.isOpen}
+                onClose={() => setModal(prev => ({ ...prev, isOpen: false }))}
+                title={modal.type === 'rename' ? 'Renomear' : modal.type === 'delete' ? 'Deletar' : 'Nova Pasta'}
+                icon={
+                    modal.type === 'rename' ? <Pencil size={18} className="text-sky-400" /> :
+                        modal.type === 'delete' ? <Trash2 size={18} className="text-red-400" /> :
+                            <FolderPlus size={18} className="text-sky-400" />
+                }
+                width="w-[400px]"
+            >
+                <div className="flex flex-col">
+                    {modal.description && (
+                        <p className="text-sm text-slate-400 mb-5">{modal.description}</p>
+                    )}
+
+                    {(modal.type === 'rename' || modal.type === 'mkdir') && (
+                        <input
+                            autoFocus
+                            value={modal.inputValue}
+                            onChange={(e) => setModal(prev => ({ ...prev, inputValue: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && handleConfirmModal(modal.inputValue)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500/40 mb-6 transition-all"
+                            placeholder={modal.type === 'mkdir' ? 'Nome da pasta' : 'Novo nome'}
+                        />
+                    )}
+
+                    <div className="flex items-center justify-end gap-3">
+                        <button
+                            onClick={() => setModal(prev => ({ ...prev, isOpen: false }))}
+                            className="px-4 py-2 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={() => handleConfirmModal(modal.inputValue)}
+                            className={`px-6 py-2 rounded-xl text-sm font-medium text-white transition-all shadow-lg active:scale-95 ${modal.type === 'delete' ? 'bg-red-600 hover:bg-red-500 shadow-red-900/20' : 'bg-sky-600 hover:bg-sky-500 shadow-sky-900/20'
+                                }`}
+                        >
+                            {modal.type === 'delete' ? 'Deletar' : modal.type === 'rename' ? 'Salvar' : 'Criar'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };
