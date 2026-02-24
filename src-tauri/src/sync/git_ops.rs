@@ -72,8 +72,28 @@ impl GitSyncService {
             repo.set_head(&refname)?;
             repo.checkout_head(Some(&mut checkout_builder))?;
         } else {
-            // Real merge required. Not fully implemented in Phase 0.3 MVP to stay within scope edge-cases.
-            tracing::warn!("Real merge required, falling back to basic strategy.");
+            // Both local and remote have commits.
+            // In our CRDT model, the remote JSON is the source of truth for the "other side".
+            // We should just hard reset our local JSON files to the remote's HEAD,
+            // read those remote JSONs, merge them with our local DB, overwrite the JSONs,
+            // and push a new commit. The hard reset allows us to effectively discard the local
+            // unpushed JSON state in favor of reading the remote's state for the merge algorithm.
+            tracing::warn!(
+                "Real merge required. Hard resetting local to FETCH_HEAD for CRDT merge."
+            );
+
+            let fetch_commit_obj = repo.find_object(fetch_commit.id(), None)?;
+            repo.reset(
+                &fetch_commit_obj,
+                git2::ResetType::Hard,
+                Some(&mut checkout_builder),
+            )?;
+
+            // Set the main branch reference to point to the fetched commit
+            let refname = format!("refs/heads/main");
+            if let Ok(mut reference) = repo.find_reference(&refname) {
+                reference.set_target(fetch_commit.id(), "Hard reset for CRDT")?;
+            }
         }
 
         Ok(())
