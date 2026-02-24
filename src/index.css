@@ -57,6 +57,241 @@ body {
   text-transform: uppercase;
 }
 
+/* Zona central — drag invisível */
+.titlebar-drag-center {
+  flex: 1;
+  height: 100%;
+  cursor: default;
+}
+
+/* Lado direito: perfil + separador + controles */
+.titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ─── Separador vertical ─── */
+.titlebar-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--titlebar-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ─── Área de perfil ─── */
+.titlebar-profile {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Botão de login */
+.titlebar-login-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(99, 136, 255, 0.25);
+  background: rgba(99, 136, 255, 0.08);
+  border-radius: 5px;
+  color: #8aa4ff;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  letter-spacing: 0.02em;
+}
+
+.titlebar-login-btn:hover:not(:disabled) {
+  background: rgba(99, 136, 255, 0.18);
+  border-color: rgba(99, 136, 255, 0.5);
+  color: #b8c8ff;
+}
+
+.titlebar-login-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Spinner de carregamento */
+.titlebar-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(99, 136, 255, 0.25);
+  border-top-color: #8aa4ff;
+  border-radius: 50%;
+  animation: titlebar-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes titlebar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Botão do avatar (logado) */
+.titlebar-avatar-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px 0 3px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.titlebar-avatar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--titlebar-border);
+}
+
+.titlebar-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(99, 136, 255, 0.3);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.titlebar-username {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-chevron {
+  color: #475569;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.titlebar-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* ─── Dropdown de perfil ─── */
+.titlebar-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: #0f172a;
+  border: 1px solid rgba(99, 136, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  z-index: 10000;
+  overflow: hidden;
+  animation: dropdown-in 0.15s ease;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.titlebar-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 12px;
+}
+
+.titlebar-dropdown-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid rgba(99, 136, 255, 0.3);
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.titlebar-dropdown-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.titlebar-dropdown-login {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0 0 1px;
+}
+
+.titlebar-dropdown-email {
+  font-size: 11px;
+  color: #475569;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.titlebar-dropdown-divider {
+  height: 1px;
+  background: rgba(99, 136, 255, 0.08);
+  margin: 0;
+}
+
+.titlebar-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+  box-shadow: none;
+}
+
+.titlebar-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-color: transparent;
+}
+
+.titlebar-dropdown-item:active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+}
+
+.titlebar-dropdown-logout {
+  color: #f87171;
+}
+
+.titlebar-dropdown-logout:hover {
+  background: rgba(248, 113, 113, 0.08) !important;
+}
+
+/* ─── Controles da Janela ─── */
 .titlebar-controls {
   display: flex;
   align-items: center;
@@ -100,5 +335,5 @@ body {
 .titlebar-btn:active {
   opacity: 0.75;
 }
-/* ────────────────────────────────────────────────────────────── */
 
+/* ────────────────────────────────────────────────────────────── */
