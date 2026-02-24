@@ -78,6 +78,17 @@ pub async fn sync_workspace(
     fs::write(&workspaces_path, workspaces_json).map_err(|e| e.to_string())?;
     fs::write(&servers_path, servers_json).map_err(|e| e.to_string())?;
 
+    // Export current local vault config to the repo if it's available
+    match state.crypto.get_vault_payload() {
+        Ok(payload) => {
+            let vault_sync_path = app_dir.join("sync_repo/vault_sync.json");
+            let _ = fs::write(&vault_sync_path, payload);
+        },
+        Err(e) => {
+            tracing::warn!("Local vault not configured or exported: {}", e);
+        }
+    }
+
     // 7. Push changes if anything was updated
     let commit_message = format!("Sync from SSH Config Sync at {}", chrono::Utc::now().to_rfc3339());
     sync_service

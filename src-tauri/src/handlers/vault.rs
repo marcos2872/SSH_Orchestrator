@@ -1,5 +1,5 @@
 use crate::AppState;
-use tauri::State;
+use tauri::{Manager, State};
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
@@ -32,4 +32,35 @@ pub fn unlock_vault(state: State<'_, AppState>, password: String) -> Result<(), 
         return Err("Password cannot be empty".to_string());
     }
     state.crypto.unlock(&password).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(app))]
+pub fn check_synced_vault(app: tauri::AppHandle) -> Result<bool, String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let vault_sync_path = app_dir.join("sync_repo/vault_sync.json");
+    Ok(vault_sync_path.exists())
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(app, state, password))]
+pub fn import_synced_vault(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    password: String,
+) -> Result<(), String> {
+    if password.is_empty() {
+        return Err("Password cannot be empty".to_string());
+    }
+
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let vault_sync_path = app_dir.join("sync_repo/vault_sync.json");
+
+    let payload = std::fs::read_to_string(&vault_sync_path)
+        .map_err(|_| "O cofre sincronizado não foi encontrado no dispositivo".to_string())?;
+
+    state
+        .crypto
+        .import_vault(&payload, &password)
+        .map_err(|e| e.to_string())
 }

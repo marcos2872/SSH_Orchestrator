@@ -7,11 +7,15 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
-use crate::models::vault::VaultConfig;
-
 const KEY_LEN: usize = 32; // AES-256
 const SALT_LEN: usize = 16;
 const PBKDF2_ITERATIONS: u32 = 100_000;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct VaultConfig {
+    pub salt: String,
+    pub encrypted_dek: String,
+}
 
 pub enum VaultState {
     Unlocked { dek: [u8; KEY_LEN] },
@@ -128,6 +132,74 @@ impl CryptoService {
 
         *state = VaultState::Unlocked { dek: current_dek };
         tracing::info!("Vault configured successfully");
+
+        Ok(())
+    }
+
+    pub fn get_vault_payload(&self) -> Result<String> {
+        let vault_path = self.app_data_dir.join("vault.json");
+        if vault_path.exists() {
+            Ok(fs::read_to_string(&vault_path)?)
+        } else {
+            Err(anyhow!("Vault not configured yet"))
+        }
+    }
+
+    pub fn import_vault(&self, payload: &str, password: &str) -> Result<()> {
+        let config: VaultConfig =
+            serde_json::from_str(payload).map_err(|_| anyhow!("Failed to parse vault payload"))?;
+
+        let salt = B64
+            .decode(&config.salt)
+            .map_err(|_| anyhow!("Invalid salt base64"))?;
+        let encrypted_dek_payload = B64
+            .decode(&config.encrypted_dek)
+            .map_err(|_| anyhow!("Invalid DEK base64"))?;
+
+        if encrypted_dek_payload.len() < NONCE_LEN + 16 {
+            return Err(anyhow!("Encrypted DEK payload too short"));
+        }
+
+        // Derive KEK
+        let mut kek = [0u8; KEY_LEN];
+        pbkdf2::derive(
+            pbkdf2::PBKDF2_HMAC_SHA256,
+            std::num::NonZeroU32::new(PBKDF2_ITERATIONS).unwrap(),
+            &salt,
+            password.as_bytes(),
+            &mut kek,
+        );
+
+        let kek_key = LessSafeKey::new(
+            UnboundKey::new(&AES_256_GCM, &kek)
+                .map_err(|_| anyhow!("Failed to create KEK AES key"))?,
+        );
+
+        let (nonce_slice, ciphertext) = encrypted_dek_payload.split_at(NONCE_LEN);
+        let nonce = Nonce::assume_unique_for_key(nonce_slice.try_into().unwrap());
+
+        let mut buf = ciphertext.to_vec();
+        let dek_slice = kek_key
+            .open_in_place(nonce, Aad::empty(), &mut buf)
+            .map_err(|_| anyhow!("Senha incorreta para o Cofre Sincronizado"))?;
+
+        let dek: [u8; KEY_LEN] = dek_slice
+            .try_into()
+            .map_err(|_| anyhow!("Decrypted DEK size invalid"))?;
+
+        // Senha correta. Salvar payload no lugar.
+        let vault_path = self.app_data_dir.join("vault.json");
+        fs::write(&vault_path, payload)?;
+
+        // Limpar app.key se existir
+        let key_path = self.app_data_dir.join("app.key");
+        if key_path.exists() {
+            let _ = fs::remove_file(&key_path);
+        }
+
+        let mut state = self.state.write().unwrap();
+        *state = VaultState::Unlocked { dek };
+        tracing::info!("Vault imported and unlocked successfully");
 
         Ok(())
     }

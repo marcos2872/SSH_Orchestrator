@@ -58,6 +58,8 @@ pub fn run() {
             handlers::vault::is_vault_locked,
             handlers::vault::unlock_vault,
             handlers::vault::setup_vault,
+            handlers::vault::check_synced_vault,
+            handlers::vault::import_synced_vault,
             handlers::auth::github_login,
             handlers::auth::get_current_user,
             handlers::auth::github_logout,
