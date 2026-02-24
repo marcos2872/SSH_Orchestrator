@@ -453,9 +453,9 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 <div className="h-8 bg-slate-900 border-t border-slate-800 flex items-center px-4 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] z-10">
                     <div className="flex items-center w-full max-w-2xl mx-auto gap-4">
                         <span className="text-xs text-slate-400 truncate w-64">{progress.file}</span>
-                        <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
                             <div
-                                className="h-full bg-sky-500 transition-all duration-200 ease-out"
+                                className="h-full bg-gradient-to-r from-sky-500 to-cyan-400 transition-all duration-300 ease-out shadow-[0_0_8px_rgba(56,189,248,0.5)]"
                                 style={{ width: `${(progress.bytes_done / Math.max(1, progress.bytes_total)) * 100}%` }}
                             />
                         </div>

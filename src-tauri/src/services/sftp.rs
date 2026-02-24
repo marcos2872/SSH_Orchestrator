@@ -5,7 +5,7 @@ use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -161,8 +161,8 @@ impl SftpService {
         remote_path: &str,
         app: &AppHandle,
     ) -> Result<()> {
-        let bytes = tokio::fs::read(local_path).await?;
-        let total = bytes.len() as u64;
+        let mut local_file = tokio::fs::File::open(local_path).await?;
+        let total = local_file.metadata().await?.len();
         let file_name = std::path::Path::new(local_path)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -173,20 +173,37 @@ impl SftpService {
 
         let flags = OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE;
         let mut remote_file = guard.session.open_with_flags(remote_path, flags).await?;
-        remote_file.write_all(&bytes).await?;
-        // O `struct File` não tem `close()`, ele fecha no drop do rust implicitamente ao sair do escopo ou usa sync_all. Aqui o drop é suficiente quando finalizado.
 
-        let _ = app.emit(&format!("sftp://progress/{}", session_id), ProgressEvent {
+        // Emit 0% progress
+        let progress_event = format!("sftp://progress/{}", session_id);
+        let _ = app.emit(&progress_event, ProgressEvent {
             session_id: session_id.to_string(),
-            file: file_name,
-            bytes_done: total,
+            file: file_name.clone(),
+            bytes_done: 0,
             bytes_total: total,
         });
 
+        let mut buffer = [0u8; 65536]; // 64KB buffer
+        let mut done = 0;
+
+        loop {
+            let n = local_file.read(&mut buffer).await?;
+            if n == 0 { break; }
+            remote_file.write_all(&buffer[..n]).await?;
+            done += n as u64;
+
+            let _ = app.emit(&progress_event, ProgressEvent {
+                session_id: session_id.to_string(),
+                file: file_name.clone(),
+                bytes_done: done,
+                bytes_total: total,
+            });
+        }
+        
         Ok(())
     }
 
-    /// Download a remote file to a local path, emitting a completion event.
+    /// Download a remote file to a local path, emitting progress events.
     pub async fn download(
         &self,
         session_id: &str,
@@ -200,18 +217,42 @@ impl SftpService {
         let guard = self.sessions.get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
 
-        let bytes = guard.session.read(remote_path).await?;
-        let total = bytes.len() as u64;
-        drop(guard);
+        let mut remote_file = guard.session.open(remote_path).await?;
+        let metadata = remote_file.metadata().await?;
+        let total = metadata.size.unwrap_or(0);
+        
+        // Drop guard early if possible but we need session for read
+        // However, russh-sftp File holds a reference to the session? No, it holds the channel.
+        // Actually, DashMap Ref prevents other writes to that segment. 
+        // Let's copy session or just hold it. For now, hold it.
+        
+        let mut local_file = tokio::fs::File::create(local_path).await?;
 
-        tokio::fs::write(local_path, &bytes).await?;
-
-        let _ = app.emit(&format!("sftp://progress/{}", session_id), ProgressEvent {
+        // Emit 0% progress
+        let progress_event = format!("sftp://progress/{}", session_id);
+        let _ = app.emit(&progress_event, ProgressEvent {
             session_id: session_id.to_string(),
-            file: file_name,
-            bytes_done: total,
+            file: file_name.clone(),
+            bytes_done: 0,
             bytes_total: total,
         });
+
+        let mut buffer = [0u8; 65536]; // 64KB buffer
+        let mut done = 0;
+
+        loop {
+            let n = remote_file.read(&mut buffer).await?;
+            if n == 0 { break; }
+            local_file.write_all(&buffer[..n]).await?;
+            done += n as u64;
+
+            let _ = app.emit(&progress_event, ProgressEvent {
+                session_id: session_id.to_string(),
+                file: file_name.clone(),
+                bytes_done: done,
+                bytes_total: total,
+            });
+        }
 
         Ok(())
     }
