@@ -56,6 +56,7 @@ pub fn run() {
             handlers::vault::is_vault_locked,
             handlers::vault::unlock_vault,
             handlers::vault::setup_vault,
+            handlers::auth::github_login,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -65,3 +66,4 @@ pub mod handlers;
 pub mod models;
 pub mod services;
 pub mod sync;
+pub mod auth;

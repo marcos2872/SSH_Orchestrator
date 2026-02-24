@@ -22,7 +22,12 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const editInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { loadWorkspaces(); }, []);
+    useEffect(() => {
+        loadWorkspaces();
+        const handler = () => loadWorkspaces();
+        window.addEventListener('workspaces-updated', handler);
+        return () => window.removeEventListener('workspaces-updated', handler);
+    }, []);
 
     useEffect(() => {
         if (editingId && editInputRef.current) {

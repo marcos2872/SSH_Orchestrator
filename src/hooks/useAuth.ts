@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface GitHubUser {
     login: string;
@@ -18,28 +19,31 @@ interface AuthState {
     isLoading: boolean;
 }
 
+interface AuthResponse {
+    user: GitHubUser;
+}
+
 export function useAuth() {
     const [auth, setAuth] = useState<AuthState>({ user: null, isLoading: false });
 
-    // TODO: substituir por chamada real ao backend Tauri para iniciar OAuth flow
     const login = async () => {
         setAuth((s) => ({ ...s, isLoading: true }));
-        // Simulação — remover quando OAuth estiver pronto
-        await new Promise((r) => setTimeout(r, 800));
-        setAuth({
-            isLoading: false,
-            user: {
-                login: 'usuario',
-                name: 'Usuário Exemplo',
-                avatar_url: 'https://github.com/github.png',
-                email: null,
-                html_url: 'https://github.com',
-            },
-        });
+        try {
+            const response = await invoke<AuthResponse>('github_login');
+            setAuth({
+                isLoading: false,
+                user: response.user,
+            });
+        } catch (e) {
+            console.error('Login failed:', e);
+            setAuth({ user: null, isLoading: false });
+        }
     };
 
-    // TODO: revogar token / limpar sessão no backend
-    const logout = () => setAuth({ user: null, isLoading: false });
+    const logout = () => {
+        setAuth({ user: null, isLoading: false });
+        // Em um app completo teríamos também um tauri command para limpar
+    };
 
     return { user: auth.user, isLoading: auth.isLoading, login, logout };
 }

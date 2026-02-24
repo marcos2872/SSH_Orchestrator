@@ -49,17 +49,32 @@ pub async fn update_workspace(
     id: String,
     name: String,
     color: String,
+    sync_enabled: Option<bool>,
 ) -> Result<(), String> {
     let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let now = Utc::now();
-    sqlx::query("UPDATE workspaces SET name = ?, color = ?, updated_at = ? WHERE id = ?")
-        .bind(&name)
-        .bind(&color)
-        .bind(&now)
-        .bind(ws_id)
-        .execute(&state.db.pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    
+    if let Some(sync) = sync_enabled {
+        sqlx::query("UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, updated_at = ? WHERE id = ?")
+            .bind(&name)
+            .bind(&color)
+            .bind(sync)
+            .bind(&now)
+            .bind(ws_id)
+            .execute(&state.db.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        sqlx::query("UPDATE workspaces SET name = ?, color = ?, updated_at = ? WHERE id = ?")
+            .bind(&name)
+            .bind(&color)
+            .bind(&now)
+            .bind(ws_id)
+            .execute(&state.db.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
     Ok(())
 }
 

@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod server;
 pub mod ssh;
 pub mod vault;

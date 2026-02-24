@@ -31,6 +31,7 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
     // Workspace edit state
     const [wsName, setWsName] = useState(workspace.name);
     const [wsColor, setWsColor] = useState(workspace.color);
+    const [wsSyncEnabled, setWsSyncEnabled] = useState((workspace as any).sync_enabled || false);
     const [savingWs, setSavingWs] = useState(false);
     const [confirmDeleteWs, setConfirmDeleteWs] = useState(false);
 
@@ -41,6 +42,7 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
     useEffect(() => {
         setWsName(workspace.name);
         setWsColor(workspace.color);
+        setWsSyncEnabled((workspace as any).sync_enabled || false);
     }, [workspace]);
 
     const loadServers = async () => {
@@ -69,8 +71,9 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
     const handleSaveWorkspace = async () => {
         setSavingWs(true);
         try {
-            await updateWorkspace(workspace.id, wsName, wsColor);
-            onWorkspaceUpdated({ id: workspace.id, name: wsName, color: wsColor });
+            await updateWorkspace(workspace.id, wsName, wsColor, wsSyncEnabled);
+            onWorkspaceUpdated({ id: workspace.id, name: wsName, color: wsColor, sync_enabled: wsSyncEnabled } as any);
+            window.dispatchEvent(new Event('workspaces-updated'));
             toast.success('Workspace atualizado!');
             setShowSettings(false);
         } catch (err) {
@@ -84,6 +87,7 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
         try {
             await deleteWorkspace(workspace.id);
             toast.success('Workspace excluído.');
+            window.dispatchEvent(new Event('workspaces-updated'));
             onWorkspaceDeleted();
         } catch (err) {
             toast.error(`Erro ao excluir workspace: ${err}`);
@@ -224,6 +228,22 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpd
                                             onChange={e => setWsName(e.target.value)}
                                             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                                         />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <label className="block text-xs text-slate-500">Sincronizar no GitHub (Smart Sync)</label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setWsSyncEnabled(!wsSyncEnabled)}
+                                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-75 ${wsSyncEnabled ? 'bg-primary' : 'bg-slate-700'}`}
+                                            role="switch"
+                                            aria-checked={wsSyncEnabled}
+                                        >
+                                            <span className="sr-only">Usar configuração de Sincronização</span>
+                                            <span
+                                                aria-hidden="true"
+                                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${wsSyncEnabled ? 'translate-x-4' : 'translate-x-0'}`}
+                                            />
+                                        </button>
                                     </div>
                                     <div>
                                         <label className="block text-xs text-slate-500 mb-2">Cor</label>

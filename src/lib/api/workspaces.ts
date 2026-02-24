@@ -4,6 +4,7 @@ export interface Workspace {
     id: string;
     name: string;
     color: string;
+    sync_enabled?: boolean;
 }
 
 export const getWorkspaces = async (): Promise<Workspace[]> => {
@@ -14,8 +15,8 @@ export const createWorkspace = async (name: string, color: string): Promise<Work
     return invoke<Workspace>('create_workspace', { name, color });
 };
 
-export const updateWorkspace = async (id: string, name: string, color: string): Promise<void> => {
-    return invoke<void>('update_workspace', { id, name, color });
+export const updateWorkspace = async (id: string, name: string, color: string, syncEnabled?: boolean): Promise<void> => {
+    return invoke<void>('update_workspace', { id, name, color, syncEnabled });
 };
 
 export const deleteWorkspace = async (id: string): Promise<void> => {

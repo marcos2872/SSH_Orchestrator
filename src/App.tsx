@@ -11,6 +11,7 @@ interface Workspace {
   id: string;
   name: string;
   color: string;
+  sync_enabled?: boolean;
 }
 
 interface Server {
@@ -35,7 +36,7 @@ const App: React.FC = () => {
     <ToastProvider>
       <VaultGuard>
         <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
-          <TitleBar />
+          <TitleBar currentWorkspace={selectedWorkspace} />
           <div className="flex flex-1 overflow-hidden">
             <Sidebar
               onSelectWorkspace={handleSelectWorkspace}

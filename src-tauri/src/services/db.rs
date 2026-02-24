@@ -27,7 +27,9 @@ impl DbService {
                 sync_enabled BOOLEAN NOT NULL DEFAULT 0,
                 local_only BOOLEAN NOT NULL DEFAULT 0,
                 color TEXT NOT NULL,
-                updated_at DATETIME NOT NULL
+                updated_at DATETIME NOT NULL,
+                hlc TEXT NOT NULL DEFAULT '',
+                deleted BOOLEAN NOT NULL DEFAULT 0
             )"
         ).execute(&pool).await?;
 
@@ -43,6 +45,8 @@ impl DbService {
                 tags TEXT NOT NULL,
                 folder_color TEXT,
                 password_enc TEXT,
+                hlc TEXT NOT NULL DEFAULT '',
+                deleted BOOLEAN NOT NULL DEFAULT 0,
                 FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
             )"
         ).execute(&pool).await?;

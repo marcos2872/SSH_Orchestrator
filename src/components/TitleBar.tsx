@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useAuth } from '../hooks/useAuth';
+import SyncStatus from './sync/SyncStatus';
 
 const appWindow = getCurrentWindow();
 
@@ -12,7 +13,15 @@ const GitHubIcon = () => (
 );
 
 /* ─── TitleBar ───────────────────────────────────────────────────── */
-const TitleBar: React.FC = () => {
+interface Props {
+    currentWorkspace?: {
+        id: string;
+        name: string;
+        sync_enabled?: boolean;
+    } | null;
+}
+
+const TitleBar: React.FC<Props> = ({ currentWorkspace }) => {
     const [isMaximized, setIsMaximized] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -81,8 +90,10 @@ const TitleBar: React.FC = () => {
                             <span>{isLoading ? 'Entrando…' : 'Entrar'}</span>
                         </button>
                     ) : (
-                        /* Avatar + dropdown */
+                        /* Avatar + dropdown e SyncStatus */
                         <>
+                            <SyncStatus state={currentWorkspace?.sync_enabled ? "idle" : "offline"} />
+                            <div className="w-px h-6 bg-slate-800 mx-2" />
                             <button
                                 className="titlebar-avatar-btn"
                                 onClick={() => setDropdownOpen((o) => !o)}
