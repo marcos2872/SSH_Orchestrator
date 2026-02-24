@@ -1,0 +1,8 @@
+pub mod server;
+pub mod ssh;
+pub mod workspace;
+
+#[tauri::command]
+pub fn greet(name: &str) -> String {
+    format!("Hello, {}! You've been greeted from Rust!", name)
+}
