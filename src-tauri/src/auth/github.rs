@@ -40,20 +40,17 @@ pub async fn start_oauth_flow() -> Result<String> {
     let redirect_uri = format!("http://localhost:{}/callback", port);
 
     // 3. Construct OAuth URL
-    let auth_url_str = std::env::var("GITHUB_AUTH_URL")
-        .unwrap_or_else(|_| "https://github.com/login/oauth/authorize".to_string())
-        .trim()
-        .to_string();
+    let auth_url_str = "https://github.com/login/oauth/authorize".to_string();
     
-    let client_id = match std::env::var("GITHUB_CLIENT_ID") {
+    let client_id = match std::env::var("GH_CLIENT_ID") {
         Ok(id) => {
             let trimmed = id.trim().to_string();
-            tracing::info!("Using GITHUB_CLIENT_ID from env (length: {})", trimmed.len());
+            tracing::info!("Using GH_CLIENT_ID from env (length: {})", trimmed.len());
             trimmed
         },
         Err(e) => {
-            tracing::error!("Failed to get GITHUB_CLIENT_ID from env: {}", e);
-            return Err(anyhow::anyhow!("GITHUB_CLIENT_ID not found in environment"));
+            tracing::error!("Failed to get GH_CLIENT_ID from env: {}", e);
+            return Err(anyhow::anyhow!("GH_CLIENT_ID not found in environment"));
         }
     };
 
@@ -169,13 +166,10 @@ pub async fn start_oauth_flow() -> Result<String> {
 
     // 6. Exchange code for access token
     let client = Client::new();
-    let token_url = std::env::var("GITHUB_TOKEN_URL")
-        .unwrap_or_else(|_| "https://github.com/login/oauth/access_token".to_string())
-        .trim()
-        .to_string();
+    let token_url = "https://github.com/login/oauth/access_token".to_string();
     
-    let client_id = std::env::var("GITHUB_CLIENT_ID")?.trim().to_string();
-    let client_secret = std::env::var("GITHUB_CLIENT_SECRET")?.trim().to_string();
+    let client_id = std::env::var("GH_CLIENT_ID")?.trim().to_string();
+    let client_secret = std::env::var("GH_CLIENT_SECRET")?.trim().to_string();
 
     tracing::info!("Exchanging code for token at: {}", token_url);
 
