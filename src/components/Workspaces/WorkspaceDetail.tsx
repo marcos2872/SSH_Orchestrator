@@ -1,26 +1,54 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Monitor, Plus, Settings, Shield, Terminal as TerminalIcon, HardDrive } from 'lucide-react';
+import {
+    Monitor, Plus, Settings, Shield, Terminal as TerminalIcon,
+    HardDrive, X, Pencil, Trash2, Check, Save
+} from 'lucide-react';
+import { useToast } from '../../hooks/useToast';
 
 interface Server {
     id: string;
     name: string;
     host: string;
+    port: number;
     username: string;
 }
 
 interface Props {
-    workspace: { id: string; name: string };
+    workspace: { id: string; name: string; color: string };
     onConnect: (serverId: string) => void;
+    onWorkspaceUpdated: (ws: { id: string; name: string; color: string }) => void;
+    onWorkspaceDeleted: () => void;
 }
 
-const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect }) => {
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect, onWorkspaceUpdated, onWorkspaceDeleted }) => {
+    const toast = useToast();
     const [servers, setServers] = useState<Server[]>([]);
     const [loading, setLoading] = useState(true);
+    const [creating, setCreating] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+
+    // Workspace edit state
+    const [wsName, setWsName] = useState(workspace.name);
+    const [wsColor, setWsColor] = useState(workspace.color);
+    const [savingWs, setSavingWs] = useState(false);
+    const [confirmDeleteWs, setConfirmDeleteWs] = useState(false);
+
+    // Server edit state
+    const [editingServer, setEditingServer] = useState<Server | null>(null);
+    const [confirmDeleteServerId, setConfirmDeleteServerId] = useState<string | null>(null);
+    const [savingServer, setSavingServer] = useState(false);
 
     useEffect(() => {
         loadServers();
     }, [workspace.id]);
+
+    useEffect(() => {
+        setWsName(workspace.name);
+        setWsColor(workspace.color);
+    }, [workspace]);
 
     const loadServers = async () => {
         setLoading(true);
@@ -28,13 +56,14 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect }) => {
             const res = await invoke<Server[]>('get_servers', { workspaceId: workspace.id });
             setServers(res);
         } catch (err) {
-            console.error('Failed to load servers:', err);
+            toast.error(`Erro ao carregar servidores: ${err}`);
         } finally {
             setLoading(false);
         }
     };
 
     const handleCreateServer = async () => {
+        setCreating(true);
         try {
             await invoke('create_server', {
                 workspaceId: workspace.id,
@@ -43,86 +72,283 @@ const WorkspaceDetail: React.FC<Props> = ({ workspace, onConnect }) => {
                 port: 22,
                 username: 'root'
             });
-            loadServers();
+            toast.success('Servidor criado! Clique em ✏️ para configurar.');
+            await loadServers();
         } catch (err) {
-            console.error('Failed to create server:', err);
+            toast.error(`Erro ao criar servidor: ${err}`);
+        } finally {
+            setCreating(false);
         }
     };
 
+    const handleSaveServer = async () => {
+        if (!editingServer) return;
+        setSavingServer(true);
+        try {
+            await invoke('update_server', {
+                id: editingServer.id,
+                name: editingServer.name,
+                host: editingServer.host,
+                port: editingServer.port,
+                username: editingServer.username,
+            });
+            toast.success('Servidor atualizado!');
+            setEditingServer(null);
+            await loadServers();
+        } catch (err) {
+            toast.error(`Erro ao atualizar servidor: ${err}`);
+        } finally {
+            setSavingServer(false);
+        }
+    };
+
+    const handleDeleteServer = async (id: string) => {
+        try {
+            await invoke('delete_server', { id });
+            setConfirmDeleteServerId(null);
+            toast.success('Servidor excluído.');
+            await loadServers();
+        } catch (err) {
+            toast.error(`Erro ao excluir servidor: ${err}`);
+        }
+    };
+
+    const handleSaveWorkspace = async () => {
+        setSavingWs(true);
+        try {
+            await invoke('update_workspace', { id: workspace.id, name: wsName, color: wsColor });
+            onWorkspaceUpdated({ id: workspace.id, name: wsName, color: wsColor });
+            toast.success('Workspace atualizado!');
+            setShowSettings(false);
+        } catch (err) {
+            toast.error(`Erro ao atualizar workspace: ${err}`);
+        } finally {
+            setSavingWs(false);
+        }
+    };
+
+    const handleDeleteWorkspace = async () => {
+        try {
+            await invoke('delete_workspace', { id: workspace.id });
+            toast.success('Workspace excluído.');
+            onWorkspaceDeleted();
+        } catch (err) {
+            toast.error(`Erro ao excluir workspace: ${err}`);
+        }
+    };
+
+    const handleSftp = (serverId: string) => {
+        toast.info(`SFTP estará disponível na Phase 0.4 🚀`);
+    };
+
     return (
-        <div className="flex-1 flex flex-col">
-            <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-900/50 backdrop-blur-sm">
+        <div className="flex-1 flex flex-col min-h-0">
+            <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-900/50 backdrop-blur-sm shrink-0">
                 <div className="flex items-center gap-4">
                     <div className="p-2 bg-primary/10 rounded-lg">
                         <Monitor className="text-primary w-5 h-5" />
                     </div>
                     <div>
                         <h2 className="text-lg font-semibold">{workspace.name}</h2>
-                        <p className="text-xs text-slate-500">{servers.length} servidores ativos</p>
+                        <p className="text-xs text-slate-500">{servers.length} servidor{servers.length !== 1 ? 'es' : ''}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={handleCreateServer}
-                        className="flex items-center gap-2 bg-primary hover:bg-blue-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        disabled={creating}
+                        className="flex items-center gap-2 bg-primary hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                     >
                         <Plus className="w-4 h-4" />
-                        Adicionar Servidor
+                        {creating ? 'Criando...' : 'Adicionar Servidor'}
                     </button>
-                    <button className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400">
+                    <button
+                        onClick={() => { setShowSettings(true); setConfirmDeleteWs(false); }}
+                        title="Configurações do Workspace"
+                        className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+                    >
                         <Settings className="w-5 h-5" />
                     </button>
                 </div>
             </header>
 
             <div className="flex-1 overflow-y-auto p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {servers.map((server) => (
-                        <div
-                            key={server.id}
-                            className="bg-secondary/40 border border-slate-800 p-5 rounded-xl hover:border-primary/50 transition-all group cursor-pointer"
-                        >
-                            <div className="flex items-start justify-between mb-4">
-                                <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-primary/20 transition-colors">
-                                    <TerminalIcon className="w-5 h-5 text-slate-400 group-hover:text-primary" />
+                {loading ? (
+                    <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
+                        Carregando servidores...
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {servers.map((server) => (
+                            <div key={server.id} className="bg-secondary/40 border border-slate-800 p-5 rounded-xl hover:border-primary/50 transition-all group">
+                                <div className="flex items-start justify-between mb-3">
+                                    <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-primary/20 transition-colors">
+                                        <TerminalIcon className="w-5 h-5 text-slate-400 group-hover:text-primary" />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => setEditingServer({ ...server })}
+                                            title="Editar servidor"
+                                            className="p-1 opacity-0 group-hover:opacity-100 hover:bg-slate-700 rounded transition-all text-slate-400 hover:text-white"
+                                        >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                            onClick={() => setConfirmDeleteServerId(server.id)}
+                                            title="Excluir servidor"
+                                            className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all text-slate-400 hover:text-red-400"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Ativo</span>
+                                <h3 className="font-semibold mb-1 truncate">{server.name}</h3>
+                                <p className="text-xs text-slate-400 font-mono mb-4 truncate">{server.username}@{server.host}:{server.port}</p>
+                                <div className="flex items-center gap-2 pt-4 border-t border-slate-800">
+                                    <button
+                                        onClick={() => onConnect(server.id)}
+                                        className="flex-1 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 rounded-md transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <TerminalIcon className="w-3 h-3" /> Connect
+                                    </button>
+                                    <button
+                                        onClick={() => handleSftp(server.id)}
+                                        title="SFTP (Phase 0.4)"
+                                        className="px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
+                                    >
+                                        <HardDrive className="w-3 h-3" />
+                                    </button>
                                 </div>
                             </div>
-                            <h3 className="font-semibold mb-1">{server.name}</h3>
-                            <p className="text-xs text-slate-400 font-mono mb-4">{server.username}@{server.host}</p>
+                        ))}
 
-                            <div className="flex items-center gap-2 pt-4 border-t border-slate-800 mt-auto">
+                        {servers.length === 0 && (
+                            <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-800 rounded-2xl">
+                                <Shield className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                                <h3 className="text-slate-400 font-medium">Nenhum servidor neste workspace</h3>
+                                <p className="text-sm text-slate-600 mb-6">Comece adicionando um novo host.</p>
                                 <button
-                                    onClick={() => onConnect(server.id)}
-                                    className="flex-1 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 rounded-md transition-colors flex items-center justify-center gap-2"
+                                    onClick={handleCreateServer}
+                                    disabled={creating}
+                                    className="text-primary text-sm font-semibold hover:underline disabled:opacity-50"
                                 >
-                                    <TerminalIcon className="w-3 h-3" /> Connect
-                                </button>
-                                <button className="px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 rounded-md transition-colors">
-                                    <HardDrive className="w-3 h-3" />
+                                    {creating ? 'Criando...' : 'Criar primeiro servidor'}
                                 </button>
                             </div>
-                        </div>
-                    ))}
+                        )}
+                    </div>
+                )}
+            </div>
 
-                    {!loading && servers.length === 0 && (
-                        <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-800 rounded-2xl">
-                            <Shield className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                            <h3 className="text-slate-400 font-medium">Nenhum servidor neste workspace</h3>
-                            <p className="text-sm text-slate-600 mb-6">Comece adicionando um novo host para gerenciar.</p>
-                            <button
-                                onClick={handleCreateServer}
-                                className="text-primary text-sm font-semibold hover:underline"
-                            >
-                                Criar primeiro servidor
+            {/* ── Workspace Settings Modal ── */}
+            {showSettings && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-[420px] shadow-2xl">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-lg font-semibold">Configurações do Workspace</h2>
+                            <button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+                        </div>
+                        {!confirmDeleteWs ? (
+                            <>
+                                <div className="space-y-4 mb-6">
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Nome do Workspace</label>
+                                        <input
+                                            value={wsName}
+                                            onChange={e => setWsName(e.target.value)}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-2">Cor</label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {COLORS.map(c => (
+                                                <button key={c} onClick={() => setWsColor(c)}
+                                                    className={`w-7 h-7 rounded-full transition-transform ${wsColor === c ? 'scale-125 ring-2 ring-white' : 'hover:scale-110'}`}
+                                                    style={{ backgroundColor: c }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={handleSaveWorkspace} disabled={savingWs || !wsName.trim()}
+                                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary hover:bg-blue-600 disabled:opacity-50 text-sm font-semibold rounded-lg transition-colors">
+                                        <Save className="w-4 h-4" />
+                                        {savingWs ? 'Salvando...' : 'Salvar'}
+                                    </button>
+                                    <button onClick={() => setConfirmDeleteWs(true)}
+                                        className="px-4 py-2 text-red-400 hover:bg-red-500/10 text-sm font-semibold rounded-lg transition-colors border border-red-500/30">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-slate-400 mb-2">Excluir <strong className="text-white">{workspace.name}</strong>?</p>
+                                <p className="text-xs text-red-400 mb-6">Todos os servidores serão excluídos permanentemente.</p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setConfirmDeleteWs(false)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">Cancelar</button>
+                                    <button onClick={handleDeleteWorkspace} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold rounded-lg transition-colors">Excluir</button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Edit Server Modal ── */}
+            {editingServer && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-[420px] shadow-2xl">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-lg font-semibold">Editar Servidor</h2>
+                            <button onClick={() => setEditingServer(null)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="space-y-3 mb-6">
+                            {[
+                                { label: 'Nome', key: 'name', type: 'text', placeholder: 'Meu Servidor' },
+                                { label: 'Host / IP', key: 'host', type: 'text', placeholder: '192.168.1.1' },
+                                { label: 'Porta', key: 'port', type: 'number', placeholder: '22' },
+                                { label: 'Usuário', key: 'username', type: 'text', placeholder: 'root' },
+                            ].map(({ label, key, type, placeholder }) => (
+                                <div key={key}>
+                                    <label className="block text-xs text-slate-500 mb-1">{label}</label>
+                                    <input
+                                        type={type}
+                                        value={String((editingServer as any)[key])}
+                                        onChange={e => setEditingServer(prev => prev ? { ...prev, [key]: type === 'number' ? Number(e.target.value) : e.target.value } : null)}
+                                        placeholder={placeholder}
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={() => setEditingServer(null)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">Cancelar</button>
+                            <button onClick={handleSaveServer} disabled={savingServer}
+                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary hover:bg-blue-600 disabled:opacity-50 text-sm font-semibold rounded-lg transition-colors">
+                                <Check className="w-4 h-4" />
+                                {savingServer ? 'Salvando...' : 'Salvar'}
                             </button>
                         </div>
-                    )}
+                    </div>
                 </div>
-            </div>
+            )}
+
+            {/* ── Delete Server Confirmation ── */}
+            {confirmDeleteServerId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-96 shadow-2xl">
+                        <h2 className="text-lg font-semibold mb-2 text-red-400">Excluir servidor?</h2>
+                        <p className="text-sm text-slate-400 mb-6">Esta ação não pode ser desfeita.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setConfirmDeleteServerId(null)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">Cancelar</button>
+                            <button onClick={() => handleDeleteServer(confirmDeleteServerId)} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold rounded-lg transition-colors">Excluir</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

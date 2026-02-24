@@ -24,8 +24,12 @@ pub fn run() {
             greet,
             get_workspaces,
             create_workspace,
+            update_workspace,
+            delete_workspace,
             get_servers,
-            create_server
+            create_server,
+            update_server,
+            delete_server
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -33,7 +37,7 @@ pub fn run() {
 
 #[tauri::command]
 async fn get_workspaces(state: State<'_, AppState>) -> Result<Vec<Workspace>, String> {
-    sqlx::query_as::<_, Workspace>("SELECT * FROM workspaces")
+    sqlx::query_as::<_, Workspace>("SELECT * FROM workspaces ORDER BY name")
         .fetch_all(&state.db.pool)
         .await
         .map_err(|e: sqlx::Error| e.to_string())
@@ -69,12 +73,54 @@ async fn create_workspace(
 }
 
 #[tauri::command]
+async fn update_workspace(
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+    color: String,
+) -> Result<(), String> {
+    let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let now = Utc::now();
+    sqlx::query("UPDATE workspaces SET name = ?, color = ?, updated_at = ? WHERE id = ?")
+        .bind(&name)
+        .bind(&color)
+        .bind(&now)
+        .bind(ws_id)
+        .execute(&state.db.pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_workspace(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    // Delete associated servers first
+    sqlx::query("DELETE FROM servers WHERE workspace_id = ?")
+        .bind(ws_id)
+        .execute(&state.db.pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+    // Then delete the workspace
+    sqlx::query("DELETE FROM workspaces WHERE id = ?")
+        .bind(ws_id)
+        .execute(&state.db.pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_servers(
     state: State<'_, AppState>,
     workspace_id: String
 ) -> Result<Vec<crate::models::Server>, String> {
+    let ws_uuid = Uuid::parse_str(&workspace_id).map_err(|e| e.to_string())?;
     let rows = sqlx::query_as::<_, crate::models::ServerRow>("SELECT * FROM servers WHERE workspace_id = ?")
-        .bind(workspace_id)
+        .bind(ws_uuid)
         .fetch_all(&state.db.pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -115,6 +161,42 @@ async fn create_server(
         .map_err(|e: sqlx::Error| e.to_string())?;
 
     Ok(server)
+}
+
+#[tauri::command]
+async fn update_server(
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+    host: String,
+    port: u16,
+    username: String,
+) -> Result<(), String> {
+    let srv_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    sqlx::query("UPDATE servers SET name = ?, host = ?, port = ?, username = ? WHERE id = ?")
+        .bind(&name)
+        .bind(&host)
+        .bind(port)
+        .bind(&username)
+        .bind(srv_id)
+        .execute(&state.db.pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_server(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let srv_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM servers WHERE id = ?")
+        .bind(srv_id)
+        .execute(&state.db.pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
