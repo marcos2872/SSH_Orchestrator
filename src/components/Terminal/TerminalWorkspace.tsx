@@ -2,6 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import Terminal, { type TerminalRef } from './Terminal';
 import TerminalTabBar from './TerminalTabBar';
+import SftpDualPane from '../Sftp/SftpDualPane';
 import type { Tab, SplitMode } from '../../hooks/useTerminalManager';
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
     onSelectTab: (tabId: string) => void;
     onCloseTab: (tabId: string) => void;
     onCloseSplit: () => void;
+    onSessionId: (tabId: string, sshSessionId: string) => void;
 }
 
 const TerminalWorkspace: React.FC<Props> = ({
@@ -24,6 +26,7 @@ const TerminalWorkspace: React.FC<Props> = ({
     onSelectTab,
     onCloseTab,
     onCloseSplit,
+    onSessionId,
 }) => {
     const mainTermRef = useRef<TerminalRef>(null);
     const splitTermRef = useRef<TerminalRef>(null);
@@ -41,6 +44,24 @@ const TerminalWorkspace: React.FC<Props> = ({
     const orientation = splitMode === 'horizontal' ? 'horizontal' : 'vertical';
     const mainTabs = tabs.filter(t => t.id !== splitTab?.id);
 
+    // ── SFTP tab — render dual-pane directly (no split, no tab bar duplication)
+    if (activeTab.type === 'sftp') {
+        return (
+            <div className="flex flex-col h-full w-full overflow-hidden">
+                <TerminalTabBar
+                    tabs={mainTabs}
+                    activeTabId={activeTabId}
+                    onSelect={onSelectTab}
+                    onClose={onCloseTab}
+                />
+                <div className="flex-1 overflow-hidden">
+                    <SftpDualPane server={activeTab.server} />
+                </div>
+            </div>
+        );
+    }
+
+    // ── Terminal tab ─────────────────────────────────────────────────────────
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
             <TerminalTabBar
@@ -62,13 +83,14 @@ const TerminalWorkspace: React.FC<Props> = ({
                             server={activeTab.server}
                             onClose={() => onCloseTab(activeTab.id)}
                             themeId={themeId}
+                            onSessionId={(sid) => onSessionId(activeTab.id, sid)}
                         />
                     </Panel>
                     <Separator
                         className={`
-              ${orientation === 'horizontal' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'}
-              bg-slate-800 hover:bg-sky-600 transition-colors shrink-0
-            `}
+                            ${orientation === 'horizontal' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'}
+                            bg-slate-800 hover:bg-sky-600 transition-colors shrink-0
+                        `}
                     />
                     <Panel defaultSize={50} minSize={20}>
                         <Terminal
@@ -76,6 +98,7 @@ const TerminalWorkspace: React.FC<Props> = ({
                             server={splitTab.server}
                             onClose={onCloseSplit}
                             themeId={themeId}
+                            onSessionId={(sid) => onSessionId(splitTab.id, sid)}
                         />
                     </Panel>
                 </Group>
@@ -86,6 +109,7 @@ const TerminalWorkspace: React.FC<Props> = ({
                         server={activeTab.server}
                         onClose={() => onCloseTab(activeTab.id)}
                         themeId={themeId}
+                        onSessionId={(sid) => onSessionId(activeTab.id, sid)}
                     />
                 </div>
             )}

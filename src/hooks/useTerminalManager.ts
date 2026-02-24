@@ -14,6 +14,9 @@ export type SplitMode = 'none' | 'horizontal' | 'vertical';
 export interface Tab {
     id: string;
     server: Server;
+    type: 'terminal' | 'sftp';
+    /** UUID retornado pelo backend ao conectar via SSH (necessário para SFTP via terminal) */
+    sshSessionId: string | null;
 }
 
 let _tabCounter = 0;
@@ -26,9 +29,23 @@ export function useTerminalManager() {
 
     const openTab = useCallback((server: Server) => {
         const id = `tab-${++_tabCounter}`;
-        const newTab: Tab = { id, server };
+        const newTab: Tab = { id, server, type: 'terminal', sshSessionId: null };
         setTabs(prev => [...prev, newTab]);
         setActiveTabId(id);
+        return id;
+    }, []);
+
+    const openSftpTab = useCallback((server: Server) => {
+        const id = `tab-${++_tabCounter}`;
+        const newTab: Tab = { id, server, type: 'sftp', sshSessionId: null };
+        setTabs(prev => [...prev, newTab]);
+        setActiveTabId(id);
+        return id;
+    }, []);
+
+    /** Atualiza o SSH session ID de uma aba após a conexão ser estabelecida pelo Terminal */
+    const updateSshSessionId = useCallback((tabId: string, sshSessionId: string) => {
+        setTabs(prev => prev.map(t => t.id === tabId ? { ...t, sshSessionId } : t));
     }, []);
 
     const closeTab = useCallback((tabId: string) => {
@@ -38,16 +55,13 @@ export function useTerminalManager() {
         });
         setActiveTabId(prev => {
             if (prev !== tabId) return prev;
-            // find nearest tab
             const idx = tabs.findIndex(t => t.id === tabId);
             const remaining = tabs.filter(t => t.id !== tabId);
             if (remaining.length === 0) return null;
-            const newIdx = Math.min(idx, remaining.length - 1);
-            return remaining[newIdx]?.id ?? null;
+            return remaining[Math.min(idx, remaining.length - 1)]?.id ?? null;
         });
         setSplitTabId(prev => prev === tabId ? null : prev);
         setSplitMode(prev => {
-            // if the closed tab was the split pane, reset split
             if (splitTabId === tabId) return 'none';
             return prev;
         });
@@ -55,7 +69,7 @@ export function useTerminalManager() {
 
     const splitPane = useCallback((direction: SplitMode, server: Server) => {
         const id = `tab-${++_tabCounter}`;
-        const newTab: Tab = { id, server };
+        const newTab: Tab = { id, server, type: 'terminal', sshSessionId: null };
         setTabs(prev => [...prev, newTab]);
         setSplitTabId(id);
         setSplitMode(direction);
@@ -82,10 +96,12 @@ export function useTerminalManager() {
         splitTabId,
         splitMode,
         openTab,
+        openSftpTab,
         closeTab,
         splitPane,
         closeSplit,
         closeAll,
+        updateSshSessionId,
         setActiveTabId,
         // Derived
         activeTab: tabs.find(t => t.id === activeTabId) ?? null,

@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import WorkspaceDetail from './components/Workspaces/WorkspaceDetail';
 import TerminalWorkspace from './components/Terminal/TerminalWorkspace';
 import ServerPickerModal from './components/Terminal/ServerPickerModal';
-import SftpPanel from './components/Sftp/SftpPanel';
 import { ToastProvider } from './hooks/useToast';
 import ToastContainer from './components/Toast';
 import TitleBar from './components/TitleBar';
@@ -23,17 +22,13 @@ interface Workspace {
 
 const App: React.FC = () => {
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
-  const [showSftp, setShowSftp] = useState(false);
-  const sftpRef = useRef(showSftp);
-  sftpRef.current = showSftp;
-
-  // Modal to pick a server when opening a new tab
   const [showServerPicker, setShowServerPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'tab' | 'sftp'>('tab');
 
   const {
     tabs, activeTabId, splitTab, splitMode,
-    openTab, closeTab, splitPane, closeSplit, closeAll, setActiveTabId,
-    activeTab, hasTabs,
+    openTab, openSftpTab, closeTab, splitPane, closeSplit, closeAll, setActiveTabId,
+    updateSshSessionId, activeTab, hasTabs,
   } = useTerminalManager();
 
   const { themeId, currentTheme, themes, changeTheme } = useTerminalTheme();
@@ -47,9 +42,12 @@ const App: React.FC = () => {
     openTab(server);
   }, [openTab]);
 
-  // Called when user picks a server from the modal
   const handlePickServer = (srv: ApiServer) => {
-    openTab(srv as Server);
+    if (pickerMode === 'sftp') {
+      openSftpTab(srv as Server);
+    } else {
+      openTab(srv as Server);
+    }
     setShowServerPicker(false);
   };
 
@@ -90,11 +88,7 @@ const App: React.FC = () => {
         if (activeTab && !splitTab) splitPane('horizontal', activeTab.server);
         return;
       }
-      if (matchesBinding(e, KEYBINDINGS.TOGGLE_SFTP)) {
-        e.preventDefault();
-        setShowSftp(v => !v);
-        return;
-      }
+      // SFTP agora é uma aba dedicada — atalho TOGGLE_SFTP não se aplica
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -150,12 +144,9 @@ const App: React.FC = () => {
                           <span>Nova aba</span>
                         </button>
                         <button
-                          onClick={() => setShowSftp(v => !v)}
+                          onClick={() => { setPickerMode('sftp'); setShowServerPicker(true); }}
                           title="Painel SFTP"
-                          className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors ${showSftp
-                            ? 'bg-sky-600 text-white'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                            }`}
+                          className="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
                         >
                           <span>📁</span>
                           <span>SFTP</span>
@@ -212,19 +203,10 @@ const App: React.FC = () => {
                       onSelectTab={setActiveTabId}
                       onCloseTab={closeTab}
                       onCloseSplit={closeSplit}
+                      onSessionId={updateSshSessionId}
                     />
                   </div>
 
-                  {/* SFTP side panel */}
-                  {showSftp && (
-                    <div className="w-72 shrink-0 overflow-hidden">
-                      <SftpPanel
-                        serverId={activeTab?.server.id ?? ''}
-                        sessionId={activeTabId}
-                        onClose={() => setShowSftp(false)}
-                      />
-                    </div>
-                  )}
                 </>
               )}
             </main>

@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use russh::client::Handle;
+use russh::{
+    client::{self, Handle},
+    keys::PublicKey,
+};
 use russh_sftp::client::SftpSession;
 use serde::Serialize;
 use std::sync::Arc;
@@ -27,6 +30,14 @@ pub struct ProgressEvent {
     pub file: String,
     pub bytes_done: u64,
     pub bytes_total: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LocalEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
 }
 
 // ─── Session state ────────────────────────────────────────────────────────────
@@ -56,6 +67,50 @@ impl SftpService {
         let id = Uuid::new_v4().to_string();
         self.sessions.insert(id.clone(), SftpState { session });
         Ok(id)
+    }
+
+    /// Create a direct SSH + SFTP connection (no PTY/shell) for the dual-pane file manager.
+    /// Returns the SFTP session ID.
+    pub async fn open_direct(
+        &self,
+        host: &str,
+        port: u16,
+        username: &str,
+        password: &str,
+    ) -> Result<String> {
+        let config = Arc::new(client::Config::default());
+        let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
+        let auth = handle.authenticate_password(username, password).await?;
+        if !matches!(auth, russh::client::AuthResult::Success) {
+            return Err(anyhow!("Autenticação SSH falhou"));
+        }
+        let channel = handle.channel_open_session().await?;
+        let session = SftpSession::new(channel.into_stream()).await?;
+        let id = Uuid::new_v4().to_string();
+        self.sessions.insert(id.clone(), SftpState { session });
+        Ok(id)
+    }
+
+    /// List local filesystem directory.
+    pub fn list_local(&self, path: &str) -> Result<Vec<LocalEntry>> {
+        let dir = std::path::Path::new(path);
+        let mut entries = Vec::new();
+        for entry in std::fs::read_dir(dir)? {
+            let e = entry?;
+            let meta = e.metadata()?;
+            let name = e.file_name().to_string_lossy().to_string();
+            let full_path = e.path().to_string_lossy().to_string();
+            // Skip hidden files
+            if name.starts_with('.') { continue; }
+            entries.push(LocalEntry {
+                is_dir: meta.is_dir(),
+                size: if meta.is_file() { meta.len() } else { 0 },
+                path: full_path,
+                name,
+            });
+        }
+        entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
+        Ok(entries)
     }
 
     /// List directory contents.

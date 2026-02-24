@@ -1,5 +1,5 @@
 use crate::AppState;
-use crate::services::sftp::SftpEntry;
+use crate::services::sftp::{LocalEntry, SftpEntry};
 use tauri::State;
 
 #[tauri::command]
@@ -17,6 +17,34 @@ pub async fn sftp_open_session(
         .sftp
         .open_session(handle)
         .await
+        .map_err(|e| e.to_string())
+}
+
+/// Connect directly via SSH+SFTP without spawning a shell (dual-pane file manager).
+#[tauri::command]
+pub async fn sftp_direct_connect(
+    state: State<'_, AppState>,
+    host: String,
+    port: u16,
+    username: String,
+    password: String,
+) -> Result<String, String> {
+    state
+        .sftp
+        .open_direct(&host, port, &username, &password)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// List local filesystem entries (dual-pane file manager).
+#[tauri::command]
+pub fn sftp_list_local(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<Vec<LocalEntry>, String> {
+    state
+        .sftp
+        .list_local(&path)
         .map_err(|e| e.to_string())
 }
 

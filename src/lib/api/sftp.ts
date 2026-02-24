@@ -45,3 +45,18 @@ export const onSftpProgress = (
     sessionId: string,
     callback: (p: SftpProgress) => void,
 ) => listen<SftpProgress>(`sftp://progress/${sessionId}`, (e) => callback(e.payload));
+
+/** Connect SSH+SFTP directly without a shell (for dual-pane SFTP tab). */
+export const sftpDirectConnect = (host: string, port: number, username: string, password: string) =>
+    invoke<string>('sftp_direct_connect', { host, port, username, password });
+
+export interface LocalEntry {
+    name: string;
+    path: string;
+    is_dir: boolean;
+    size: number;
+}
+
+/** List local filesystem directory. */
+export const sftpListLocal = (path: string) =>
+    invoke<LocalEntry[]>('sftp_list_local', { path });

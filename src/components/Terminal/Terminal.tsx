@@ -23,11 +23,13 @@ interface Props {
     server: Server;
     onClose: () => void;
     themeId?: string;
+    /** Chamado com o SSH session ID (UUID do backend) assim que a conexão for estabelecida */
+    onSessionId?: (sessionId: string) => void;
 }
 
 type ConnectionState = 'loading' | 'prompt' | 'connecting' | 'connected' | 'error';
 
-const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeId = 'dark-default' }, ref) => {
+const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeId = 'dark-default', onSessionId }, ref) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<XTerm | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
@@ -145,6 +147,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeI
             });
 
             setConnState('connected');
+            onSessionId?.(sessionId);
             xtermRef.current?.focus();
         } catch (err) {
             term?.writeln(`\x1b[1;31m[✗] Erro: ${String(err)}\x1b[0m`);
@@ -164,14 +167,6 @@ const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeI
         if (server.has_saved_password) { setConnState('loading'); connectWithPassword(null); }
         else setConnState('prompt');
     };
-
-    const statusLabel = {
-        loading: <span className="text-yellow-400 ml-2">⟳ Iniciando...</span>,
-        prompt: <span className="text-slate-400 ml-2">🔑 Aguardando senha</span>,
-        connecting: <span className="text-yellow-400 ml-2">⟳ Conectando...</span>,
-        connected: <span className="text-green-400 ml-2">● Conectado</span>,
-        error: <span className="text-red-400 ml-2">✗ Desconectado</span>,
-    }[connState];
 
     return (
         <div className="flex flex-col h-full w-full bg-[#0f172a] relative">
