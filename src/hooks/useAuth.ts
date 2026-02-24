@@ -3,7 +3,7 @@
  * Substituir a lógica de login/logout pela integração real com OAuth quando implementado.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface GitHubUser {
@@ -24,7 +24,22 @@ interface AuthResponse {
 }
 
 export function useAuth() {
-    const [auth, setAuth] = useState<AuthState>({ user: null, isLoading: false });
+    const [auth, setAuth] = useState<AuthState>({ user: null, isLoading: true });
+
+    useEffect(() => {
+        invoke<AuthResponse | null>('get_current_user')
+            .then(res => {
+                if (res) {
+                    setAuth({ user: res.user, isLoading: false });
+                } else {
+                    setAuth({ user: null, isLoading: false });
+                }
+            })
+            .catch(err => {
+                console.error("Failed to fetch user:", err);
+                setAuth({ user: null, isLoading: false });
+            });
+    }, []);
 
     const login = async () => {
         setAuth((s) => ({ ...s, isLoading: true }));
@@ -40,9 +55,14 @@ export function useAuth() {
         }
     };
 
-    const logout = () => {
+    const logout = async () => {
+        setAuth((s) => ({ ...s, isLoading: true }));
+        try {
+            await invoke('github_logout');
+        } catch (e) {
+            console.error('Logout failed:', e);
+        }
         setAuth({ user: null, isLoading: false });
-        // Em um app completo teríamos também um tauri command para limpar
     };
 
     return { user: auth.user, isLoading: auth.isLoading, login, logout };

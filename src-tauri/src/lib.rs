@@ -57,6 +57,8 @@ pub fn run() {
             handlers::vault::unlock_vault,
             handlers::vault::setup_vault,
             handlers::auth::github_login,
+            handlers::auth::get_current_user,
+            handlers::auth::github_logout,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

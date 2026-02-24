@@ -1,7 +1,7 @@
 use crate::auth::github::{self, GitHubUser};
 use serde::Serialize;
 use std::sync::Mutex;
-
+use tauri::Manager;
 lazy_static::lazy_static! {
     // Basic in-memory state for token just for testing, in a real app this should be stored securely
     static ref GITHUB_TOKEN: Mutex<Option<String>> = Mutex::new(None);
@@ -13,7 +13,7 @@ pub struct AuthResponse {
 }
 
 #[tauri::command]
-pub async fn github_login() -> Result<AuthResponse, String> {
+pub async fn github_login(app: tauri::AppHandle, state: tauri::State<'_, crate::AppState>) -> Result<AuthResponse, String> {
     // Em uma aplicação real, salvaríamos o access token na storage cifrada (Vault)
     match github::start_oauth_flow().await {
         Ok(token) => {
@@ -21,6 +21,12 @@ pub async fn github_login() -> Result<AuthResponse, String> {
                 let mut guard = GITHUB_TOKEN.lock().unwrap();
                 *guard = Some(token.clone());
             } // unlock before await
+            
+            if let Ok(encrypted) = state.crypto.encrypt(&token) {
+                if let Ok(app_dir) = app.path().app_data_dir() {
+                    let _ = std::fs::write(app_dir.join("github_token.enc"), encrypted);
+                }
+            }
             
             match github::get_user(&token).await {
                 Ok(user) => {
@@ -36,4 +42,37 @@ pub async fn github_login() -> Result<AuthResponse, String> {
         },
         Err(e) => Err(format!("Falha na autenticação OAuth: {}", e)),
     }
+}
+
+#[tauri::command]
+pub async fn get_current_user(app: tauri::AppHandle, state: tauri::State<'_, crate::AppState>) -> Result<Option<AuthResponse>, String> {
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let token_path = app_dir.join("github_token.enc");
+        if let Ok(encrypted) = std::fs::read_to_string(&token_path) {
+            if let Ok(token) = state.crypto.decrypt(&encrypted) {
+                // Pre-populate in-memory token
+                {
+                    let mut guard = GITHUB_TOKEN.lock().unwrap();
+                    *guard = Some(token.clone());
+                }
+                match github::get_user(&token).await {
+                    Ok(user) => return Ok(Some(AuthResponse { user })),
+                    Err(_) => return Ok(None),
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub async fn github_logout(app: tauri::AppHandle) -> Result<(), String> {
+    {
+        let mut guard = GITHUB_TOKEN.lock().unwrap();
+        *guard = None;
+    }
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let _ = std::fs::remove_file(app_dir.join("github_token.enc"));
+    }
+    Ok(())
 }
