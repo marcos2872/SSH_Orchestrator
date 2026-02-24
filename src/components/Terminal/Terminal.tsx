@@ -273,7 +273,7 @@ const Terminal: React.FC<Props> = ({ server, onClose }) => {
             )}
 
             {/* xterm container */}
-            <div ref={terminalRef} className="flex-1 p-2 overflow-hidden" />
+            <div ref={terminalRef} className="flex-1 p-2 pb-4 overflow-hidden" />
         </div>
     );
 };

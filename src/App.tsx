@@ -17,6 +17,7 @@ interface Server {
   host: string;
   port: number;
   username: string;
+  has_saved_password: boolean;
 }
 
 const App: React.FC = () => {
