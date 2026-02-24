@@ -94,7 +94,7 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
         <>
             <div
                 className={`
-                    bg-secondary h-screen border-r border-slate-700 flex flex-col
+                    bg-secondary h-full border-r border-slate-700 flex flex-col
                     transition-all duration-300 ease-in-out overflow-hidden shrink-0
                     ${collapsed ? 'w-14' : 'w-64'}
                 `}
