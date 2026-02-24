@@ -31,6 +31,7 @@ export function useAuth() {
             .then(res => {
                 if (res) {
                     setAuth({ user: res.user, isLoading: false });
+                    window.dispatchEvent(new Event('workspaces-updated'));
                 } else {
                     setAuth({ user: null, isLoading: false });
                 }
@@ -49,6 +50,7 @@ export function useAuth() {
                 isLoading: false,
                 user: response.user,
             });
+            window.dispatchEvent(new Event('workspaces-updated'));
         } catch (e) {
             console.error('Login failed:', e);
             setAuth({ user: null, isLoading: false });
