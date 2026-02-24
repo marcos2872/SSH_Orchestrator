@@ -59,8 +59,14 @@ pub fn import_synced_vault(
     let payload = std::fs::read_to_string(&vault_sync_path)
         .map_err(|_| "O cofre sincronizado não foi encontrado no dispositivo".to_string())?;
 
-    state
+    let import_result = state
         .crypto
         .import_vault(&payload, &password)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+
+    if import_result.is_ok() {
+        crate::handlers::auth::reencrypt_token(&app, &state);
+    }
+
+    import_result
 }

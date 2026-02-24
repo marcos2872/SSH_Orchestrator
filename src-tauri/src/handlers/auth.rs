@@ -12,6 +12,22 @@ pub struct AuthResponse {
     user: GitHubUser,
 }
 
+pub fn reencrypt_token(app: &tauri::AppHandle, state: &tauri::State<'_, crate::AppState>) {
+    let token_opt = {
+        let guard = GITHUB_TOKEN.lock().unwrap();
+        guard.clone()
+    };
+    
+    if let Some(token) = token_opt {
+        if let Ok(encrypted) = state.crypto.encrypt(&token) {
+            if let Ok(app_dir) = app.path().app_data_dir() {
+                let _ = std::fs::write(app_dir.join("github_token.enc"), encrypted);
+                tracing::info!("GitHub token re-encrypted with new vault DEK");
+            }
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn github_login(app: tauri::AppHandle, state: tauri::State<'_, crate::AppState>) -> Result<AuthResponse, String> {
     // Em uma aplicação real, salvaríamos o access token na storage cifrada (Vault)
