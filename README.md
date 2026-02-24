@@ -58,15 +58,15 @@ graph TD
 ## 🚀 Development Roadmap
 
 ### ✅ Phase 0.1 - Local MVP (Tauri v2)
-- [ ] Tauri v2 + React 19 basic setup
-- [ ] Local SQLite storage with initial encryption
-- [ ] Basic connection management
-- [ ] Simple Terminal emulator
+- [x] Tauri v2 + React 19 basic setup
+- [x] Local SQLite storage with initial encryption
+- [x] Basic connection management
+- [x] Simple Terminal emulator
 
 ### 🔐 Phase 0.2 - Security & Logging
-- [ ] `ring` AES-256 integration
-- [ ] **Structured Logging**: Implementation of `tracing-subscriber` for backend observability
-- [ ] Master Password Vault implementation
+- [x] `ring` AES-256 integration
+- [x] **Structured Logging**: Implementation of `tracing-subscriber` for backend observability
+- [x] Master Password Vault implementation
 
 ### ☁️ Phase 0.3 - Smart Sync
 - [ ] GitHub OAuth + Private Repo provisioning

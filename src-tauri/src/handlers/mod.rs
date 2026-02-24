@@ -1,5 +1,6 @@
 pub mod server;
 pub mod ssh;
+pub mod vault;
 pub mod workspace;
 
 #[tauri::command]

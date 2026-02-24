@@ -11,6 +11,7 @@ pub struct AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tracing::info!("Starting SSH Config Sync backend...");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -22,9 +23,13 @@ pub fn run() {
                     .expect("failed to get app data dir");
                 std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
 
+                tracing::info!("Initializing database at {:?}", app_dir);
                 let db = DbService::new(&handle).await.expect("failed to init db");
+                
+                tracing::info!("Initializing crypto service (Vault)");
                 let crypto = CryptoService::new(&app_dir).expect("failed to init crypto");
 
+                tracing::info!("Services initialized, injecting into Tauri state");
                 handle.manage(AppState {
                     db,
                     ssh: SshService::new(),
@@ -47,6 +52,10 @@ pub fn run() {
             handlers::ssh::ssh_connect,
             handlers::ssh::ssh_write,
             handlers::ssh::ssh_disconnect,
+            handlers::vault::is_vault_configured,
+            handlers::vault::is_vault_locked,
+            handlers::vault::unlock_vault,
+            handlers::vault::setup_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
