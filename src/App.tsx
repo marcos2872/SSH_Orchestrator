@@ -1,51 +1,54 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import React, { useState } from 'react';
+import Sidebar from './components/Sidebar';
+import WorkspaceDetail from './components/Workspaces/WorkspaceDetail';
+import Terminal from './components/Terminal/Terminal';
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+interface Workspace {
+  id: string;
+  name: string;
+  color: string;
+}
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+const App: React.FC = () => {
+  const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
+  const [activeServerId, setActiveServerId] = useState<string | null>(null);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <Sidebar
+        onSelectWorkspace={(ws) => {
+          setSelectedWorkspace(ws);
+          setActiveServerId(null);
         }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+        selectedId={selectedWorkspace?.id}
+      />
+      <main className="flex-1 flex flex-col relative overflow-hidden">
+        {selectedWorkspace ? (
+          <WorkspaceDetail
+            workspace={selectedWorkspace}
+            onConnect={setActiveServerId}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-slate-500">
+            <div className="text-center">
+              <div className="w-24 h-24 mx-auto mb-8 bg-slate-800/50 rounded-full flex items-center justify-center border border-slate-700">
+                <img src="/tauri.svg" className="w-12 h-12 opacity-40" alt="Tauri logo" />
+              </div>
+              <h2 className="text-xl font-light tracking-widest text-slate-400 mb-2">ORCHESTRATOR READY</h2>
+              <p className="text-sm font-light tracking-wide text-slate-600">Selecione um Workspace para gerenciar seus servidores</p>
+            </div>
+          </div>
+        )}
+
+        {activeServerId && (
+          <Terminal
+            serverId={activeServerId}
+            onClose={() => setActiveServerId(null)}
+          />
+        )}
+      </main>
+    </div>
   );
-}
+};
 
 export default App;
