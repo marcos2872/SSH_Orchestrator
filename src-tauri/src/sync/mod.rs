@@ -67,22 +67,30 @@ pub async fn pull_workspace(
         tracing::info!("No synced vault found at {:?}", vault_sync_path);
     }
 
-    let workspaces_path = app_dir.join("sync_repo/workspaces.json");
-    let servers_path = app_dir.join("sync_repo/servers.json");
+    let workspaces_dir = app_dir.join("sync_repo/workspaces");
+    let mut remote_workspaces = Vec::new();
+    let mut remote_servers = Vec::new();
+    let mut pulled_workspace_ids = std::collections::HashSet::new();
 
-    let remote_workspaces: Vec<CRDTWorkspace> = if workspaces_path.exists() {
-        let json_str = fs::read_to_string(&workspaces_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&json_str).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    let remote_servers: Vec<CRDTServer> = if servers_path.exists() {
-        let json_str = fs::read_to_string(&servers_path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&json_str).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    if workspaces_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&workspaces_dir) {
+            for entry in entries.flatten() {
+                if let Ok(ft) = entry.file_type() {
+                    if ft.is_file() {
+                        if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
+                            if let Ok(json_str) = fs::read_to_string(entry.path()) {
+                                if let Ok(mut sync_data) = serde_json::from_str::<merge::WorkspaceSyncData>(&json_str) {
+                                    pulled_workspace_ids.insert(sync_data.workspace.id.clone());
+                                    remote_workspaces.push(sync_data.workspace);
+                                    remote_servers.append(&mut sync_data.servers);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Merge logic combining local SQLite with the recently pulled and parsed remote JSONs.
     // merge_workspaces and merge_servers update the SQLite db.
@@ -90,7 +98,7 @@ pub async fn pull_workspace(
         .await
         .map_err(|e| e.to_string())?;
 
-    let _ = merge::merge_servers(&state, remote_servers)
+    let _ = merge::merge_servers(&state, remote_servers, &pulled_workspace_ids)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -145,14 +153,41 @@ pub async fn push_workspace(
         .await
         .map_err(|e| e.to_string())?;
 
-    let workspaces_path = app_dir.join("sync_repo/workspaces.json");
-    let servers_path = app_dir.join("sync_repo/servers.json");
+    let workspaces_dir = app_dir.join("sync_repo/workspaces");
+    if !workspaces_dir.exists() {
+        fs::create_dir_all(&workspaces_dir).map_err(|e| e.to_string())?;
+    }
 
-    let workspaces_json = serde_json::to_string_pretty(&resolved_workspaces).map_err(|e| e.to_string())?;
-    let servers_json = serde_json::to_string_pretty(&resolved_servers).map_err(|e| e.to_string())?;
+    // Cleanup legacy files if present
+    let legacy_workspaces_path = app_dir.join("sync_repo/workspaces.json");
+    let legacy_servers_path = app_dir.join("sync_repo/servers.json");
+    if legacy_workspaces_path.exists() { let _ = fs::remove_file(&legacy_workspaces_path); }
+    if legacy_servers_path.exists() { let _ = fs::remove_file(&legacy_servers_path); }
 
-    fs::write(&workspaces_path, workspaces_json).map_err(|e| e.to_string())?;
-    fs::write(&servers_path, servers_json).map_err(|e| e.to_string())?;
+    for workspace in resolved_workspaces {
+        let file_path = workspaces_dir.join(format!("{}.json", workspace.id));
+        
+        if !workspace.sync_enabled || workspace.deleted {
+            if file_path.exists() {
+                let _ = fs::remove_file(&file_path);
+            }
+        } else {
+            let mut ws_servers = Vec::new();
+            for server in &resolved_servers {
+                if server.workspace_id == workspace.id && !server.deleted {
+                    ws_servers.push(server.clone());
+                }
+            }
+            
+            let sync_data = merge::WorkspaceSyncData {
+                workspace,
+                servers: ws_servers,
+            };
+            
+            let json_str = serde_json::to_string_pretty(&sync_data).map_err(|e| e.to_string())?;
+            fs::write(&file_path, json_str).map_err(|e| e.to_string())?;
+        }
+    }
 
     // Export current local vault config
     match state.crypto.get_vault_payload() {

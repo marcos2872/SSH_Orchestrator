@@ -6,6 +6,12 @@ use sqlx::Row;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WorkspaceSyncData {
+    pub workspace: CRDTWorkspace,
+    pub servers: Vec<CRDTServer>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CRDTWorkspace {
     pub id: String,
     pub name: String,
@@ -98,10 +104,15 @@ pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Ve
     }
     
     // Whatever is left in local_map is from local and doesn't exist in remote.
-    // Since this is a manual Pull (overwrite local with remote), we should delete them from the local DB.
-    for (id_str, _) in local_map {
-        let id_uuid = Uuid::parse_str(&id_str).unwrap_or_default();
-        sqlx::query("DELETE FROM workspaces WHERE id = ?").bind(&id_uuid).execute(&state.db.pool).await?;
+    // Since this is an individual JSON architecture, if a workspace is missing from remote
+    // but has sync_enabled = true locally, it means another device disabled sync or deleted it.
+    // We handle this as a "soft delete" by disabling sync locally.
+    for (id_str, ws) in local_map {
+        if ws.sync_enabled {
+            let id_uuid = Uuid::parse_str(&id_str).unwrap_or_default();
+            sqlx::query("UPDATE workspaces SET sync_enabled = false WHERE id = ?").bind(&id_uuid).execute(&state.db.pool).await?;
+            tracing::info!("Workspace {} was missing from remote, disabled sync locally.", ws.name);
+        }
     }
     
     Ok(resolved_workspaces)
@@ -135,14 +146,22 @@ pub async fn get_local_servers(state: &State<'_, AppState>) -> Result<Vec<CRDTSe
     Ok(results)
 }
 
-pub async fn merge_servers(state: &State<'_, AppState>, remote_servers: Vec<CRDTServer>) -> Result<Vec<CRDTServer>> {
+pub async fn merge_servers(
+    state: &State<'_, AppState>, 
+    remote_servers: Vec<CRDTServer>, 
+    pulled_workspace_ids: &std::collections::HashSet<String>
+) -> Result<Vec<CRDTServer>> {
     let mut resolved_servers = Vec::new();
     
     let local_servers = get_local_servers(state).await?;
         
     let mut local_map = std::collections::HashMap::new();
     for srv in local_servers {
-        local_map.insert(srv.id.clone(), srv);
+        // Only consider local servers that belong to workspaces we just pulled!
+        // This protects servers belonging to non-synced workspaces.
+        if pulled_workspace_ids.contains(&srv.workspace_id) {
+            local_map.insert(srv.id.clone(), srv);
+        }
     }
 
     for remote in remote_servers {

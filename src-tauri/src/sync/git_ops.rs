@@ -120,6 +120,7 @@ impl GitSyncService {
     pub fn push(&self, repo: &Repository, token: &str, message: &str) -> Result<()> {
         let mut index = repo.index()?;
         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
+        index.update_all(["*"].iter(), None)?;
         index.write()?;
 
         let oid = index.write_tree()?;
