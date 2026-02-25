@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project Overview
-SSH Config Sync is a cross-platform SSH client built with Tauri v2, React 19, and Rust. It features selective workspace syncing, CRDT-based conflict resolution, AES-256-GCM encryption, and a built-in professional terminal emulator.
+SSH Config Sync is a cross-platform SSH client built with Tauri v2, React 19, and Rust. It features selective workspace syncing, CRDT-based conflict resolution, AES-256-GCM encryption, and a professional terminal with Tabs, Split-Pane, and Theme support.
 
 ## Setup Commands
 - Install dependencies: `pnpm install`
@@ -14,7 +14,8 @@ SSH Config Sync is a cross-platform SSH client built with Tauri v2, React 19, an
 - **Framework**: React 19.
 - **Language**: TypeScript (strict mode).
 - **Styling**: TailwindCSS for styling and UI micro-animations.
-- **Terminal**: `xterm.js` for the terminal emulator.
+- **Terminal**: `xterm.js` with Tabs and Split-Pane support.
+- **Themes**: Customizable terminal themes (stored in localStorage).
 
 ### Backend (`/src-tauri`)
 - **Framework**: Tauri v2 & Rust (1.77+).

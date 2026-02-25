@@ -15,7 +15,7 @@
 - 📁 **Selective Workspace Sync**: Granular synchronization settings (Local-only vs. Cloud Sync).
 - ☁️ **Conflict Resolution (CRDTs)**: Advanced sync engine using **Conflict-free Replicated Data Types** (LWW-Register) to ensure data consistency across multiple devices.
 - 🔒 **Zero-Trust Security**: AES-256-GCM encryption for all sensitive data. Master password never leaves your machine.
-- 🖥️ **Professional Terminal**: High-performance terminal emulator with **Tabs** and **Split-Pane** support for multitasking.
+- 🖥️ **Professional Terminal**: High-performance terminal emulator with **Tabs**, **Split-Pane**, and **Themes** support.
 - ⚡ **Native Performance**: Minimal footprint (~20MB) and native speed powered by Rust.
 - 🎨 **Modern Interface**: Clean UI built with React 19 and TailwindCSS, including sub-millisecond responsive micro-animations.
 
@@ -73,10 +73,10 @@ graph TD
 - [x] **CRDT Engine**: Implementation of conflict-free synchronization logic
 - [x] Workspace push/pull with automatic merging
 
-### ⚡ Phase 0.4 - Pro Terminal & SFTP
-- [ ] **Terminal Tabs & Split-Pane** support
-- [ ] Integrated SFTP operations (Drag & Drop)
-- [ ] Native Themes & Keyboard Shortcuts
+### ✅ Phase 0.4 - Pro Terminal & SFTP
+- [x] **Terminal Tabs & Split-Pane** support
+- [x] Integrated SFTP operations (Drag & Drop)
+- [x] Native Themes & Keyboard Shortcuts
 
 ### 🔑 Phase 1.0 - SSH Identity Management
 - [ ] SSH Key generation and management
