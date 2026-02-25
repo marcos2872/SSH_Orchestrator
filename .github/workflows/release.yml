@@ -6,7 +6,9 @@ on:
       - 'v*.*.*'     # Auto on tag v1.0.0
 
 permissions:
-  contents: write  # For creating releases
+  contents: write
+  id-token: write
+  pull-requests: write
 
 jobs:
   publish-tauri:
@@ -52,7 +54,6 @@ jobs:
         GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
         tagName: ${{ github.ref_name }}
         releaseName: 'SSH Orchestrator v${{ github.ref_name }}'
         releaseBody: '## Instaláveis para todas plataformas!'
@@ -66,4 +67,4 @@ jobs:
         # macOSTarget: 'dmg'     # .dmg
         
         # Linux
-        linuxTarget: 'AppImage,debian,rpm'  # .AppImage + .deb + .rpm
+
