@@ -66,4 +66,4 @@ jobs:
         # macOSTarget: 'dmg'     # .dmg
         
         # Linux
-        linuxTarget: 'AppImage,debian'  # .AppImage + .deb
+        linuxTarget: 'AppImage,debian,rpm'  # .AppImage + .deb + .rpm
