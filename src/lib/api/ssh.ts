@@ -1,10 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 
-export const sshConnect = async (serverId: string, password?: string | null): Promise<string> => {
-    return invoke<string>('ssh_connect', {
+export const sshConnect = async (serverId: string, password?: string | null, sessionId?: string): Promise<string> => {
+    const sid = sessionId || crypto.randomUUID();
+    await invoke<void>('ssh_connect', {
         serverId,
         password: password || null,
+        sessionId: sid,
     });
+    return sid;
 };
 
 export const sshWrite = async (sessionId: string, data: string): Promise<void> => {

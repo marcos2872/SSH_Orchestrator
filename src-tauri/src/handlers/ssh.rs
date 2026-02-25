@@ -10,6 +10,7 @@ pub async fn ssh_connect(
     app: tauri::AppHandle,
     server_id: String,
     password: Option<String>,
+    session_id: String,
 ) -> Result<String, String> {
     let srv_uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
 
@@ -44,7 +45,7 @@ pub async fn ssh_connect(
 
     state
         .ssh
-        .connect(app, &server.host, server.port, &server.username, &resolved_password)
+        .connect(app, &server.host, server.port, &server.username, &resolved_password, session_id)
         .await
         .map_err(|e| e.to_string())
 }

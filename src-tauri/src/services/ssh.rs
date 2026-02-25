@@ -67,9 +67,8 @@ impl SshService {
         port: u16,
         username: &str,
         password: &str,
+        session_id: String,
     ) -> Result<String> {
-        let session_id = Uuid::new_v4().to_string();
-
         let config = std::sync::Arc::new(client::Config::default());
         let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
 

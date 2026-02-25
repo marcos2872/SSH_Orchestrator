@@ -5,6 +5,7 @@ import { Terminal as XTerm, IDisposable } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { getTheme } from '../../lib/themes';
+import Modal from '../Modal';
 
 export interface TerminalRef {
     fit: () => void;
@@ -25,11 +26,12 @@ interface Props {
     themeId?: string;
     /** Chamado com o SSH session ID (UUID do backend) assim que a conexão for estabelecida */
     onSessionId?: (sessionId: string) => void;
+    isActive?: boolean;
 }
 
 type ConnectionState = 'loading' | 'prompt' | 'connecting' | 'connected' | 'error';
 
-const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeId = 'dark-default', onSessionId }, ref) => {
+const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeId = 'dark-default', onSessionId, isActive = true }, ref) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<XTerm | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
@@ -110,8 +112,8 @@ const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeI
     }, []);
 
     useEffect(() => {
-        if (connState === 'prompt') setTimeout(() => passwordRef.current?.focus(), 50);
-    }, [connState]);
+        if (connState === 'prompt' && isActive) setTimeout(() => passwordRef.current?.focus(), 50);
+    }, [connState, isActive]);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     const cleanupSession = async () => {
@@ -133,7 +135,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeI
             term?.writeln('\x1b[2m[🔒 Usando senha salva...]\x1b[0m');
         }
         try {
-            const sessionId = await sshConnect(server.id, pw);
+            const sessionId = crypto.randomUUID();
             sessionIdRef.current = sessionId;
 
             unlistenDataRef.current = await listen<string>(`ssh://data/${sessionId}`, (event) => {
@@ -145,6 +147,8 @@ const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeI
                 xtermRef.current?.writeln('\r\n\x1b[33m[Conexão encerrada pelo servidor]\x1b[0m');
                 setConnState('error');
             });
+
+            await sshConnect(server.id, pw, sessionId);
 
             setConnState('connected');
             onSessionId?.(sessionId);
@@ -172,32 +176,34 @@ const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeI
         <div className="flex flex-col h-full w-full bg-[#0f172a] relative">
 
             {/* Password prompt */}
-            {connState === 'prompt' && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0f172a]/95 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-96 shadow-2xl">
-                        <h3 className="text-lg font-semibold mb-1">Autenticação SSH</h3>
-                        <p className="text-sm text-slate-400 font-mono mb-6">{server.username}@{server.host}:{server.port}</p>
-                        <div className="mb-4">
-                            <label className="block text-xs text-slate-500 mb-1">Senha</label>
-                            <input
-                                ref={passwordRef}
-                                type="password"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleConnect(); }}
-                                placeholder="••••••••"
-                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                        </div>
-                        <p className="text-xs text-slate-600 mb-4">
-                            💡 Edite o servidor e ative "Salvar senha" para se conectar sem digitar sempre.
-                        </p>
-                        <div className="flex gap-3">
-                            <button onClick={handleClose} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">Cancelar</button>
-                            <button onClick={handleConnect} disabled={!password} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-sm font-semibold rounded-lg transition-colors">Conectar</button>
-                        </div>
+            {connState === 'prompt' && isActive && (
+                <Modal
+                    isOpen={true}
+                    onClose={handleClose}
+                    title="Autenticação SSH"
+                    width="w-96"
+                >
+                    <p className="text-sm text-slate-400 font-mono mb-6">{server.username}@{server.host}:{server.port}</p>
+                    <div className="mb-4">
+                        <label className="block text-xs text-slate-500 mb-1">Senha</label>
+                        <input
+                            ref={passwordRef}
+                            type="password"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleConnect(); }}
+                            placeholder="••••••••"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
                     </div>
-                </div>
+                    <p className="text-xs text-slate-600 mb-4">
+                        💡 Edite o servidor e ative "Salvar senha" para se conectar sem digitar sempre.
+                    </p>
+                    <div className="flex gap-3">
+                        <button onClick={handleClose} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors">Cancelar</button>
+                        <button onClick={handleConnect} disabled={!password} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-sm font-semibold rounded-lg transition-colors">Conectar</button>
+                    </div>
+                </Modal>
             )}
 
             {/* Error / reconnect */}

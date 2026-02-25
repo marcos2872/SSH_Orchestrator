@@ -76,6 +76,7 @@ const TerminalWorkspace: React.FC<Props> = ({
                                         onClose={() => onCloseTab(tab.id)}
                                         themeId={themeId}
                                         onSessionId={(sid) => onSessionId(tab.id, sid)}
+                                        isActive={isActive}
                                     />
                                 ) : (
                                     <div className="flex-1 overflow-hidden">
@@ -104,6 +105,7 @@ const TerminalWorkspace: React.FC<Props> = ({
                                         onClose={onCloseSplit}
                                         themeId={themeId}
                                         onSessionId={(sid) => onSessionId(splitTab.id, sid)}
+                                        isActive={true}
                                     />
                                 ) : (
                                     <div className="flex-1 overflow-hidden">
