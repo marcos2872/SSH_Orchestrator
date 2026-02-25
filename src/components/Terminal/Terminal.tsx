@@ -209,7 +209,11 @@ const Terminal = React.forwardRef<TerminalRef, Props>(({ server, onClose, themeI
             )}
 
             {/* xterm container */}
-            <div ref={terminalRef} className="flex-1 p-2 pb-4 overflow-hidden" />
+            <div className="flex-1 p-3 pb-4 min-h-0 relative overflow-hidden flex flex-col">
+                <div className={`flex-1 overflow-hidden relative p-1 border ${connState === 'connected' ? 'border-green-500/50 w-full h-full' : 'border-transparent w-full h-full'}`}>
+                    <div ref={terminalRef} className="h-full w-full" />
+                </div>
+            </div>
         </div>
     );
 });
