@@ -52,7 +52,10 @@ jobs:
     
     - name: 🚀 Build Tauri
       uses: tauri-apps/tauri-action@v0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
         tagName: ${{ github.ref_name }}
         releaseName: 'SSH Orchestrator v${{ github.ref_name }}'
         releaseBody: '## Instaláveis para todas plataformas!'
