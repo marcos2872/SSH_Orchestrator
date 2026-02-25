@@ -17,6 +17,11 @@ jobs:
         # platform: [macos-latest, ubuntu-latest, windows-latest]
     
     runs-on: ${{ matrix.platform }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
+      GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
     steps:
     - uses: actions/checkout@v4
     
@@ -47,10 +52,6 @@ jobs:
     
     - name: 🚀 Build Tauri
       uses: tauri-apps/tauri-action@v0
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
-        GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
       with:
         tagName: ${{ github.ref_name }}
         releaseName: 'SSH Orchestrator v${{ github.ref_name }}'
