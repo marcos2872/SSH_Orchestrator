@@ -13,7 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-latest, windows-latest]
+        platform: [ubuntu-latest]
+        # platform: [macos-latest, ubuntu-latest, windows-latest]
     
     runs-on: ${{ matrix.platform }}
     steps:
@@ -57,10 +58,10 @@ jobs:
         prerelease: false
         
         # Windows
-        windowsTarget: 'nsis'  # .exe instalador
+        # windowsTarget: 'nsis'  # .exe instalador
         
         # macOS  
-        macOSTarget: 'dmg'     # .dmg
+        # macOSTarget: 'dmg'     # .dmg
         
         # Linux
         linuxTarget: 'AppImage,debian'  # .AppImage + .deb
