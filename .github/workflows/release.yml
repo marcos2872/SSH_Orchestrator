@@ -48,6 +48,7 @@ jobs:
     - name: 🚀 Build Tauri
       uses: tauri-apps/tauri-action@v0
       env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
         GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
       with:
