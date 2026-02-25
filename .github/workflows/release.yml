@@ -56,7 +56,7 @@ jobs:
         tagName: ${{ github.ref_name }}
         releaseName: 'SSH Orchestrator v${{ github.ref_name }}'
         releaseBody: '## Instaláveis para todas plataformas!'
-        releaseDraft: true
+        releaseDraft: false
         prerelease: false
         
         # Windows
