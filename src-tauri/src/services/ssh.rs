@@ -52,7 +52,10 @@ impl SshService {
     }
 
     /// Return an Arc clone of the SSH Handle for a session (used to open SFTP sub-channels).
-    pub async fn get_handle(&self, session_id: &str) -> Option<Arc<Mutex<Handle<SshClientHandler>>>> {
+    pub async fn get_handle(
+        &self,
+        session_id: &str,
+    ) -> Option<Arc<Mutex<Handle<SshClientHandler>>>> {
         self.sessions.get(session_id).map(|s| Arc::clone(&s.handle))
     }
 
@@ -72,12 +75,12 @@ impl SshService {
         let config = std::sync::Arc::new(client::Config::default());
         let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
 
-        let auth_result = handle
-            .authenticate_password(username, password)
-            .await?;
+        let auth_result = handle.authenticate_password(username, password).await?;
 
         if !matches!(auth_result, russh::client::AuthResult::Success) {
-            return Err(anyhow!("Autenticação SSH falhou: usuário ou senha incorretos"));
+            return Err(anyhow!(
+                "Autenticação SSH falhou: usuário ou senha incorretos"
+            ));
         }
 
         // Open an interactive shell session
@@ -86,7 +89,7 @@ impl SshService {
         // Request a PTY so the remote shell renders correctly in xterm
         channel
             .request_pty(
-                false,
+                true,
                 "xterm-256color",
                 220, // cols
                 50,  // rows
@@ -151,7 +154,10 @@ impl SshService {
 
         self.sessions.insert(
             session_id.clone(),
-            SshSession { handle: Arc::new(Mutex::new(handle)), writer_tx },
+            SshSession {
+                handle: Arc::new(Mutex::new(handle)),
+                writer_tx,
+            },
         );
 
         Ok(session_id)
