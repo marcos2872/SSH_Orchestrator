@@ -49,7 +49,6 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
     const unlistenDataRef = useRef<UnlistenFn | null>(null);
     const unlistenCloseRef = useRef<UnlistenFn | null>(null);
     const onDataDisposableRef = useRef<IDisposable | null>(null);
-    const autoConnectFired = useRef(false);
 
     const [connState, setConnState] = useState<ConnectionState>(
       server.has_saved_password ? "loading" : "prompt",
