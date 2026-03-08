@@ -98,6 +98,54 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 curl -fsSL https://get.pnpm.io/install.sh | sh -
 ```
 
+**3. Linux Dependencies (Tauri)**
+Depending on your Linux distribution, you will need to install specific system dependencies for Tauri:
+
+**Ubuntu / Debian:**
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libxdo-dev \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -Syu
+sudo pacman -S --needed \
+  webkit2gtk-4.1 \
+  base-devel \
+  curl \
+  wget \
+  file \
+  openssl \
+  appmenu-gtk-module \
+  gtk3 \
+  libappindicator-gtk3 \
+  librsvg \
+  libvips
+```
+
+**Fedora:**
+```bash
+sudo dnf check-update
+sudo dnf install \
+  webkit2gtk4.1-devel \
+  openssl-devel \
+  curl \
+  wget \
+  file \
+  libappindicator-gtk3-devel \
+  librsvg2-devel
+sudo dnf group install "C Development Tools and Libraries"
+```
+
 ### Installation & Run
 
 1.  **Install dependencies:**
