@@ -145,7 +145,7 @@ const App: React.FC = () => {
     <ToastProvider>
       <VaultGuard>
         <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
-          <TitleBar currentWorkspace={selectedWorkspace} />
+          <TitleBar />
           <div className="flex flex-1 overflow-hidden relative">
             <Sidebar
               onSelectWorkspace={handleSelectWorkspace}

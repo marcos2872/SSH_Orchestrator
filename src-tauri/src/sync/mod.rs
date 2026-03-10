@@ -5,7 +5,31 @@ pub mod repo;
 
 use crate::AppState;
 use std::fs;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+// ─── Progress Events ────────────────────────────────────────────────────────
+
+/// Payload emitted to the frontend via `sync://progress` events so the UI can
+/// show step-by-step feedback during pull / push operations.
+#[derive(Clone, serde::Serialize)]
+pub struct SyncProgressEvent {
+    pub step: String,
+    pub detail: String,
+}
+
+/// Helper to emit a progress event.  Failures are silently ignored — progress
+/// reporting is best-effort.
+fn emit_progress(app: &AppHandle, step: &str, detail: &str) {
+    let _ = app.emit(
+        "sync://progress",
+        SyncProgressEvent {
+            step: step.to_string(),
+            detail: detail.to_string(),
+        },
+    );
+}
+
+// ─── Shared Helpers ─────────────────────────────────────────────────────────
 
 /// Parse all `{id}.json` files from the `sync_repo/workspaces/` directory into
 /// vectors of remote workspaces and servers, and collect the workspace IDs that
@@ -22,6 +46,7 @@ fn read_remote_jsons(
     let mut pulled_workspace_ids = std::collections::HashSet::new();
 
     if !workspaces_dir.exists() {
+        tracing::debug!("read_remote_jsons: workspaces dir does not exist yet");
         return (remote_workspaces, remote_servers, pulled_workspace_ids);
     }
 
@@ -33,27 +58,97 @@ fn read_remote_jsons(
         }
     };
 
+    let mut json_files_found: u32 = 0;
+    let mut parse_ok: u32 = 0;
+    let mut parse_failed: u32 = 0;
+    let mut read_failed: u32 = 0;
+    let mut failed_files: Vec<String> = Vec::new();
+
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
             continue;
         }
+        json_files_found += 1;
+        let filename = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
         let json_str = match fs::read_to_string(&path) {
             Ok(s) => s,
             Err(err) => {
-                tracing::warn!("Failed to read {:?}: {}", path, err);
+                read_failed += 1;
+                failed_files.push(filename.clone());
+                tracing::warn!(
+                    "Failed to read {:?}: {} (file may be locked or inaccessible)",
+                    path,
+                    err,
+                );
                 continue;
             }
         };
+
+        // Basic sanity check before attempting deserialization
+        let trimmed = json_str.trim();
+        if trimmed.is_empty() {
+            parse_failed += 1;
+            failed_files.push(filename.clone());
+            tracing::warn!(
+                "Skipping {:?}: file is empty (possible partial write / corruption)",
+                path,
+            );
+            continue;
+        }
+
         match serde_json::from_str::<merge::WorkspaceSyncData>(&json_str) {
             Ok(mut sync_data) => {
+                parse_ok += 1;
+                let server_count = sync_data.servers.len();
+                tracing::debug!(
+                    "Parsed {:?}: workspace='{}', {} server(s)",
+                    filename,
+                    sync_data.workspace.name,
+                    server_count,
+                );
                 pulled_workspace_ids.insert(sync_data.workspace.id.clone());
                 remote_workspaces.push(sync_data.workspace);
                 remote_servers.append(&mut sync_data.servers);
             }
             Err(err) => {
-                tracing::warn!("Failed to parse {:?}: {}", path, err);
+                parse_failed += 1;
+                failed_files.push(filename.clone());
+                tracing::warn!(
+                    "Failed to parse {:?}: {} (file may be corrupted or in an old format)",
+                    path,
+                    err,
+                );
             }
+        }
+    }
+
+    // Summary log so operators can quickly spot data-integrity issues
+    if json_files_found == 0 {
+        tracing::info!("read_remote_jsons: no JSON files found in workspaces dir");
+    } else {
+        let failures = read_failed + parse_failed;
+        if failures > 0 {
+            tracing::warn!(
+                "read_remote_jsons summary: {}/{} JSON files parsed successfully, {} failed [{}]",
+                parse_ok,
+                json_files_found,
+                failures,
+                failed_files.join(", "),
+            );
+        } else {
+            tracing::info!(
+                "read_remote_jsons summary: all {}/{} JSON files parsed successfully ({} workspace(s), {} server(s))",
+                parse_ok,
+                json_files_found,
+                remote_workspaces.len(),
+                remote_servers.len(),
+            );
         }
     }
 
@@ -86,17 +181,17 @@ fn resolve_token(
 pub async fn pull_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
-    _workspace_id: String,
     provided_token: Option<String>,
 ) -> Result<(), String> {
-    let _lock = state
-        .sync_lock
-        .try_lock()
-        .map_err(|_| "Sincronização já em andamento")?;
+    let _lock = state.sync_lock.try_lock().map_err(|_| {
+        tracing::warn!("pull_workspace: sync lock already held");
+        "Sincronização já em andamento".to_string()
+    })?;
 
     let token = resolve_token(provided_token, &app, &state)?;
 
-    tracing::info!("pull_workspace: starting...");
+    tracing::info!("pull_workspace: starting…");
+    emit_progress(&app, "connect", "Conectando ao GitHub…");
 
     let repo_info = repo::ensure_sync_repo_exists(&token).await.map_err(|e| {
         tracing::error!("pull_workspace: failed to ensure sync repo: {}", e);
@@ -104,19 +199,29 @@ pub async fn pull_workspace(
     })?;
 
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let sync_service = git_ops::GitSyncService::new(&app_dir);
 
-    let git_repo = sync_service
-        .init_repo(&repo_info.clone_url, &token)
-        .map_err(|e| {
-            tracing::error!("pull_workspace: failed to init/clone repo: {}", e);
-            e.to_string()
-        })?;
+    // ── Git operations run on a blocking thread ─────────────────────────
+    let clone_url = repo_info.clone_url.clone();
+    let tok = token.clone();
+    let ad = app_dir.clone();
+    let app_clone = app.clone();
 
-    sync_service.pull(&git_repo, &token).map_err(|e| {
-        tracing::error!("pull_workspace: git pull failed: {}", e);
-        e.to_string()
-    })?;
+    tokio::task::spawn_blocking(move || {
+        emit_progress(&app_clone, "fetch", "Baixando dados do repositório…");
+        let sync_service = git_ops::GitSyncService::new(&ad);
+        let git_repo = sync_service
+            .init_repo(&clone_url, &tok)
+            .map_err(|e| e.to_string())?;
+        sync_service
+            .pull(&git_repo, &tok)
+            .map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| format!("Blocking task panicked: {}", e))?
+    .map_err(|e: String| e)?;
+
+    emit_progress(&app, "merge", "Mesclando dados…");
 
     // Log vault_sync.json presence
     let vault_sync_path = app_dir.join("sync_repo/vault_sync.json");
@@ -146,6 +251,7 @@ pub async fn pull_workspace(
         .await
         .map_err(|e| e.to_string())?;
 
+    emit_progress(&app, "done", "Sincronização concluída!");
     tracing::info!("pull_workspace: done");
     Ok(())
 }
@@ -156,36 +262,47 @@ pub async fn pull_workspace(
 pub async fn push_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
-    _workspace_id: String,
     provided_token: Option<String>,
 ) -> Result<(), String> {
-    let _lock = state
-        .sync_lock
-        .try_lock()
-        .map_err(|_| "Sincronização já em andamento")?;
+    let _lock = state.sync_lock.try_lock().map_err(|_| {
+        tracing::warn!("push_workspace: sync lock already held");
+        "Sincronização já em andamento".to_string()
+    })?;
 
     let token = resolve_token(provided_token, &app, &state)?;
-
     let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let sync_service = git_ops::GitSyncService::new(&app_dir);
+
+    tracing::info!("push_workspace: starting…");
+    emit_progress(&app, "connect", "Conectando ao GitHub…");
 
     let repo_info = repo::ensure_sync_repo_exists(&token)
         .await
         .map_err(|e| e.to_string())?;
 
-    let git_repo = sync_service
-        .init_repo(&repo_info.clone_url, &token)
-        .map_err(|e| e.to_string())?;
+    // ── Step 1: Pull remote HEAD (blocking) ─────────────────────────────
+    let clone_url = repo_info.clone_url.clone();
+    let tok = token.clone();
+    let ad = app_dir.clone();
+    let app_clone = app.clone();
 
-    // ── Step 1: Pull remote HEAD so we can fast-forward ──
-    sync_service
-        .pull(&git_repo, &token)
-        .map_err(|e| e.to_string())?;
+    tokio::task::spawn_blocking(move || {
+        emit_progress(&app_clone, "fetch", "Baixando dados do repositório…");
+        let sync_service = git_ops::GitSyncService::new(&ad);
+        let git_repo = sync_service
+            .init_repo(&clone_url, &tok)
+            .map_err(|e| e.to_string())?;
+        sync_service
+            .pull(&git_repo, &tok)
+            .map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| format!("Blocking task panicked: {}", e))?
+    .map_err(|e: String| e)?;
 
-    // ── Step 2: Merge remote JSONs into local DB (LWW) ──
-    // This is the key difference from the old implementation: we run the full
-    // merge *before* serializing so that data from other devices is preserved
-    // if it has a newer HLC.
+    // ── Step 2: Merge remote JSONs into local DB (LWW) ──────────────────
+    emit_progress(&app, "merge", "Mesclando dados…");
+
     let workspaces_dir = app_dir.join("sync_repo/workspaces");
     let (remote_workspaces, remote_servers, pulled_workspace_ids) =
         read_remote_jsons(&workspaces_dir);
@@ -204,7 +321,9 @@ pub async fn push_workspace(
         .await
         .map_err(|e| e.to_string())?;
 
-    // ── Step 3: Serialize the post-merge local DB to JSON files ──
+    // ── Step 3: Serialize post-merge local DB to JSON files ─────────────
+    emit_progress(&app, "serialize", "Preparando dados para envio…");
+
     let resolved_workspaces = merge::get_local_workspaces(&state)
         .await
         .map_err(|e| e.to_string())?;
@@ -229,17 +348,14 @@ pub async fn push_workspace(
         let file_path = workspaces_dir.join(format!("{}.json", workspace.id));
 
         if !workspace.sync_enabled || workspace.deleted {
-            // Remove the JSON file so the remote knows this workspace
-            // is no longer synced.
             if file_path.exists() {
                 let _ = fs::remove_file(&file_path);
             }
             continue;
         }
 
-        // Collect non-deleted servers for this workspace.
-        // Note: `password_enc` is annotated with `#[serde(skip_serializing)]`
-        // in CRDTServer, so it will never appear in the JSON output.
+        // `password_enc` is annotated with `#[serde(skip_serializing)]` in
+        // CRDTServer so it will never appear in the JSON output.
         let ws_servers: Vec<merge::CRDTServer> = resolved_servers
             .iter()
             .filter(|s| s.workspace_id == workspace.id && !s.deleted)
@@ -255,7 +371,7 @@ pub async fn push_workspace(
         fs::write(&file_path, json_str).map_err(|e| e.to_string())?;
     }
 
-    // ── Step 4: Export vault config ──
+    // ── Step 4: Export vault config ─────────────────────────────────────
     match state.crypto.get_vault_payload() {
         Ok(payload) => {
             let vault_sync_path = app_dir.join("sync_repo/vault_sync.json");
@@ -266,16 +382,55 @@ pub async fn push_workspace(
         }
     }
 
-    // ── Step 5: Commit & push ──
-    let commit_message = format!(
-        "Sync from {} at {}",
-        state.node_id,
-        chrono::Utc::now().to_rfc3339()
-    );
-    sync_service
-        .push(&git_repo, &token, &commit_message)
-        .map_err(|e| format!("Failed to push: {}", e))?;
+    // ── Step 5: Commit & push (blocking) ────────────────────────────────
+    let tok = token.clone();
+    let ad = app_dir.clone();
+    let node_id = state.node_id.clone();
+    let app_clone = app.clone();
 
+    // Build a descriptive commit message including synced workspace names and
+    // server counts so the git history is human-readable.
+    let synced_ws: Vec<&str> = resolved_workspaces
+        .iter()
+        .filter(|ws| ws.sync_enabled && !ws.deleted)
+        .map(|ws| ws.name.as_str())
+        .collect();
+    let total_servers: usize = resolved_servers.iter().filter(|s| !s.deleted).count();
+
+    let ws_summary = if synced_ws.is_empty() {
+        "(no synced workspaces)".to_string()
+    } else {
+        synced_ws.join(", ")
+    };
+
+    let commit_message = format!(
+        "Sync from {} at {}\n\nWorkspaces: {}\nServers: {}",
+        node_id,
+        chrono::Utc::now().to_rfc3339(),
+        ws_summary,
+        total_servers,
+    );
+
+    tokio::task::spawn_blocking(move || {
+        emit_progress(&app_clone, "push", "Enviando dados para o GitHub…");
+        let sync_service = git_ops::GitSyncService::new(&ad);
+        let git_repo = sync_service
+            .init_repo(
+                // We already cloned/opened previously so this is just an open.
+                &format!("https://dummy.invalid"),
+                &tok,
+            )
+            .map_err(|e| e.to_string())?;
+        sync_service
+            .push(&git_repo, &tok, &commit_message)
+            .map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| format!("Blocking task panicked: {}", e))?
+    .map_err(|e: String| e)?;
+
+    emit_progress(&app, "done", "Sincronização concluída!");
     tracing::info!("push_workspace: done");
     Ok(())
 }
