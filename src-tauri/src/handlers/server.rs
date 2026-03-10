@@ -1,3 +1,4 @@
+use crate::sync::crdt::HLC;
 use crate::AppState;
 use tauri::State;
 use uuid::Uuid;
@@ -8,12 +9,13 @@ pub async fn get_servers(
     workspace_id: String,
 ) -> Result<Vec<crate::models::Server>, String> {
     let ws_uuid = Uuid::parse_str(&workspace_id).map_err(|e| e.to_string())?;
-    let rows =
-        sqlx::query_as::<_, crate::models::ServerRow>("SELECT * FROM servers WHERE workspace_id = ? AND deleted = 0")
-            .bind(ws_uuid)
-            .fetch_all(&state.db.pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    let rows = sqlx::query_as::<_, crate::models::ServerRow>(
+        "SELECT * FROM servers WHERE workspace_id = ? AND deleted = 0",
+    )
+    .bind(ws_uuid)
+    .fetch_all(&state.db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(rows.into_iter().map(|r| r.into_server()).collect())
 }
@@ -42,6 +44,8 @@ pub async fn create_server(
         None
     };
 
+    let hlc = HLC::now(&state.node_id);
+
     let server = crate::models::Server {
         id: Uuid::new_v4(),
         workspace_id: Uuid::parse_str(&workspace_id).map_err(|e| e.to_string())?,
@@ -52,11 +56,9 @@ pub async fn create_server(
         tags: vec![],
         folder_color: None,
         has_saved_password: password_enc.is_some(),
-        hlc: format!("{}", chrono::Utc::now().timestamp_millis()),
+        hlc: hlc.to_string_repr(),
         deleted: false,
     };
-
-    let hlc = format!("{}", chrono::Utc::now().timestamp_millis());
 
     sqlx::query(
         "INSERT INTO servers (id, workspace_id, name, host, port, username, tags, password_enc, hlc, deleted)
@@ -70,7 +72,7 @@ pub async fn create_server(
     .bind(&server.username)
     .bind(serde_json::to_string(&server.tags).unwrap())
     .bind(&password_enc)
-    .bind(&hlc)
+    .bind(&server.hlc)
     .execute(&state.db.pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -103,7 +105,7 @@ pub async fn update_server(
         None
     };
 
-    let hlc = format!("{}", chrono::Utc::now().timestamp_millis());
+    let hlc = HLC::now(&state.node_id).to_string_repr();
 
     sqlx::query(
         "UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password_enc = ?, hlc = ? WHERE id = ?",
@@ -125,7 +127,7 @@ pub async fn update_server(
 #[tauri::command]
 pub async fn delete_server(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let srv_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let hlc = format!("{}", chrono::Utc::now().timestamp_millis());
+    let hlc = HLC::now(&state.node_id).to_string_repr();
     sqlx::query("UPDATE servers SET deleted = 1, hlc = ? WHERE id = ?")
         .bind(&hlc)
         .bind(srv_id)

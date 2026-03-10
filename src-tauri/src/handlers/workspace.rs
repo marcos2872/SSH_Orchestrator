@@ -1,5 +1,6 @@
-use crate::AppState;
 use crate::models::Workspace;
+use crate::sync::crdt::HLC;
+use crate::AppState;
 use chrono::Utc;
 use tauri::State;
 use uuid::Uuid;
@@ -18,6 +19,8 @@ pub async fn create_workspace(
     name: String,
     color: String,
 ) -> Result<Workspace, String> {
+    let hlc = HLC::now(&state.node_id);
+
     let workspace = Workspace {
         id: Uuid::new_v4(),
         name,
@@ -25,7 +28,7 @@ pub async fn create_workspace(
         local_only: false,
         color,
         updated_at: Utc::now(),
-        hlc: format!("{}", Utc::now().timestamp_millis()),
+        hlc: hlc.to_string_repr(),
         deleted: false,
     };
 
@@ -57,8 +60,8 @@ pub async fn update_workspace(
 ) -> Result<(), String> {
     let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let now = Utc::now();
-    let hlc = format!("{}", now.timestamp_millis());
-    
+    let hlc = HLC::now(&state.node_id).to_string_repr();
+
     if let Some(sync) = sync_enabled {
         sqlx::query("UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, updated_at = ?, hlc = ? WHERE id = ?")
             .bind(&name)
@@ -71,25 +74,27 @@ pub async fn update_workspace(
             .await
             .map_err(|e| e.to_string())?;
     } else {
-        sqlx::query("UPDATE workspaces SET name = ?, color = ?, updated_at = ?, hlc = ? WHERE id = ?")
-            .bind(&name)
-            .bind(&color)
-            .bind(&now)
-            .bind(&hlc)
-            .bind(ws_id)
-            .execute(&state.db.pool)
-            .await
-            .map_err(|e| e.to_string())?;
+        sqlx::query(
+            "UPDATE workspaces SET name = ?, color = ?, updated_at = ?, hlc = ? WHERE id = ?",
+        )
+        .bind(&name)
+        .bind(&color)
+        .bind(&now)
+        .bind(&hlc)
+        .bind(ws_id)
+        .execute(&state.db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_workspace(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let hlc = format!("{}", Utc::now().timestamp_millis());
-    
+    let hlc = HLC::now(&state.node_id).to_string_repr();
+
     // Soft delete to allow sync
     sqlx::query("UPDATE servers SET deleted = 1, hlc = ? WHERE workspace_id = ?")
         .bind(&hlc)
@@ -97,13 +102,13 @@ pub async fn delete_workspace(state: State<'_, AppState>, id: String) -> Result<
         .execute(&state.db.pool)
         .await
         .map_err(|e| e.to_string())?;
-        
+
     sqlx::query("UPDATE workspaces SET deleted = 1, hlc = ? WHERE id = ?")
         .bind(&hlc)
         .bind(ws_id)
         .execute(&state.db.pool)
         .await
         .map_err(|e| e.to_string())?;
-        
+
     Ok(())
 }

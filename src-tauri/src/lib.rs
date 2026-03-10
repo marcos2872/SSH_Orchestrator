@@ -12,6 +12,8 @@ pub struct AppState {
     pub pty: PtyService,
     pub crypto: CryptoService,
     pub sync_lock: tokio::sync::Mutex<()>,
+    /// Stable device identifier used as the node_id component of HLC timestamps.
+    pub node_id: String,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,6 +40,9 @@ pub fn run() {
                 tracing::info!("Initializing crypto service (Vault)");
                 let crypto = CryptoService::new(&app_dir).expect("failed to init crypto");
 
+                let node_id = sync::crdt::get_or_create_node_id(&app_dir);
+                tracing::info!("Node ID for this device: {}", node_id);
+
                 tracing::info!("Services initialized, injecting into Tauri state");
                 handle.manage(AppState {
                     db,
@@ -46,6 +51,7 @@ pub fn run() {
                     pty: PtyService::new(),
                     crypto,
                     sync_lock: tokio::sync::Mutex::new(()),
+                    node_id,
                 });
             });
             Ok(())

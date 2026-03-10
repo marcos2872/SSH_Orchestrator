@@ -1,9 +1,12 @@
+use crate::sync::crdt::HLC;
+use crate::AppState;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use crate::AppState;
-use tauri::State;
 use sqlx::Row;
+use tauri::State;
 use uuid::Uuid;
+
+// ─── Sync Data Structures ───────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WorkspaceSyncData {
@@ -30,65 +33,129 @@ pub struct CRDTServer {
     pub port: u16,
     pub username: String,
     pub tags: String,
+    /// Always `None` in sync payloads — passwords are never transmitted between
+    /// devices because each vault has a different DEK.  Kept in the struct so
+    /// that `get_local_servers` can read the column without a separate type.
+    #[serde(skip_serializing)]
+    #[serde(default)]
     pub password_enc: Option<String>,
     pub hlc: String,
     pub deleted: bool,
 }
 
+// ─── Read helpers ───────────────────────────────────────────────────────────
+
 pub async fn get_local_workspaces(state: &State<'_, AppState>) -> Result<Vec<CRDTWorkspace>> {
-    let local_workspaces = sqlx::query("SELECT * FROM workspaces")
+    let rows = sqlx::query("SELECT * FROM workspaces")
         .fetch_all(&state.db.pool)
         .await?;
-        
+
     let mut results = Vec::new();
-    for row in local_workspaces {
+    for row in rows {
         let id: Uuid = row.get("id");
-        let id_str = id.to_string();
-        let name: String = row.get("name");
-        let color: String = row.get("color");
-        let sync_enabled: bool = row.get("sync_enabled");
-        let hlc: String = row.get("hlc");
-        let deleted: bool = row.get("deleted");
-        
         results.push(CRDTWorkspace {
-            id: id_str, name, color, sync_enabled, hlc, deleted
+            id: id.to_string(),
+            name: row.get("name"),
+            color: row.get("color"),
+            sync_enabled: row.get("sync_enabled"),
+            hlc: row.get("hlc"),
+            deleted: row.get("deleted"),
         });
     }
     Ok(results)
 }
 
-pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Vec<CRDTWorkspace>) -> Result<Vec<CRDTWorkspace>> {
-    let mut resolved_workspaces = Vec::new();
-    
-    let local_workspaces = get_local_workspaces(state).await?;
-        
-    let mut local_map = std::collections::HashMap::new();
-    for ws in local_workspaces {
-        local_map.insert(ws.id.clone(), ws);
-    }
+pub async fn get_local_servers(state: &State<'_, AppState>) -> Result<Vec<CRDTServer>> {
+    let rows = sqlx::query("SELECT * FROM servers")
+        .fetch_all(&state.db.pool)
+        .await?;
 
-    // Unconditionally apply remote state
+    let mut results = Vec::new();
+    for row in rows {
+        let id: Uuid = row.get("id");
+        let workspace_id: Uuid = row.get("workspace_id");
+        let port: i64 = row.get("port");
+        results.push(CRDTServer {
+            id: id.to_string(),
+            workspace_id: workspace_id.to_string(),
+            name: row.get("name"),
+            host: row.get("host"),
+            port: port as u16,
+            username: row.get("username"),
+            tags: row.get("tags"),
+            password_enc: row.get("password_enc"),
+            hlc: row.get("hlc"),
+            deleted: row.get("deleted"),
+        });
+    }
+    Ok(results)
+}
+
+// ─── Workspace merge ────────────────────────────────────────────────────────
+
+/// Merge remote workspaces into the local SQLite database using Last-Writer-Wins
+/// semantics based on HLC comparison.
+///
+/// Returns the resolved set of workspaces (useful for callers that want to
+/// inspect the result, e.g. push-after-merge).
+pub async fn merge_workspaces(
+    state: &State<'_, AppState>,
+    remote_workspaces: Vec<CRDTWorkspace>,
+) -> Result<Vec<CRDTWorkspace>> {
+    let local_workspaces = get_local_workspaces(state).await?;
+
+    let mut local_map: std::collections::HashMap<String, CRDTWorkspace> = local_workspaces
+        .into_iter()
+        .map(|ws| (ws.id.clone(), ws))
+        .collect();
+
+    let mut resolved: Vec<CRDTWorkspace> = Vec::new();
+
     for remote in remote_workspaces {
-        if let Some(_) = local_map.get(&remote.id) {
-            let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
-            // Remote wins unconditionally on pull
-            sqlx::query("UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, hlc = ?, deleted = ? WHERE id = ?")
-                .bind(&remote.name)
-                .bind(&remote.color)
-                .bind(remote.sync_enabled)
-                .bind(&remote.hlc)
-                .bind(remote.deleted)
-                .bind(&remote_id)
+        if let Some(local) = local_map.remove(&remote.id) {
+            let local_hlc = HLC::parse(&local.hlc);
+            let remote_hlc = HLC::parse(&remote.hlc);
+
+            let winner = if remote_hlc > local_hlc {
+                &remote
+            } else {
+                &local
+            };
+
+            let winner_id = Uuid::parse_str(&winner.id).unwrap_or_default();
+            sqlx::query(
+                "UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, hlc = ?, deleted = ? WHERE id = ?"
+            )
+                .bind(&winner.name)
+                .bind(&winner.color)
+                .bind(winner.sync_enabled)
+                .bind(&winner.hlc)
+                .bind(winner.deleted)
+                .bind(winner_id)
                 .execute(&state.db.pool)
                 .await?;
-            
-            resolved_workspaces.push(remote.clone());
-            local_map.remove(&remote.id);
+
+            tracing::debug!(
+                "merge_workspaces: id={} winner={} (local_hlc={}, remote_hlc={})",
+                winner.id,
+                if remote_hlc > local_hlc {
+                    "remote"
+                } else {
+                    "local"
+                },
+                local.hlc,
+                remote.hlc,
+            );
+
+            resolved.push(winner.clone());
         } else {
+            // New workspace from remote — insert it
             let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
-            // Remote exists but local doesn't (new workspace from another device)
-            sqlx::query("INSERT INTO workspaces (id, name, color, sync_enabled, local_only, updated_at, hlc, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-                .bind(&remote_id)
+            sqlx::query(
+                "INSERT INTO workspaces (id, name, color, sync_enabled, local_only, updated_at, hlc, deleted) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+                .bind(remote_id)
                 .bind(&remote.name)
                 .bind(&remote.color)
                 .bind(remote.sync_enabled)
@@ -98,115 +165,148 @@ pub async fn merge_workspaces(state: &State<'_, AppState>, remote_workspaces: Ve
                 .bind(remote.deleted)
                 .execute(&state.db.pool)
                 .await?;
-                
-            resolved_workspaces.push(remote);
+
+            tracing::info!(
+                "merge_workspaces: inserted new remote workspace '{}'",
+                remote.name
+            );
+            resolved.push(remote);
         }
     }
-    
-    // Whatever is left in local_map is from local and doesn't exist in remote.
-    // Since this is an individual JSON architecture, if a workspace is missing from remote
-    // but has sync_enabled = true locally, it means another device disabled sync or deleted it.
-    // We handle this as a "soft delete" by disabling sync locally.
-    for (id_str, ws) in local_map {
-        if ws.sync_enabled {
-            let id_uuid = Uuid::parse_str(&id_str).unwrap_or_default();
-            sqlx::query("UPDATE workspaces SET sync_enabled = false WHERE id = ?").bind(&id_uuid).execute(&state.db.pool).await?;
-            tracing::info!("Workspace {} was missing from remote, disabled sync locally.", ws.name);
-        }
+
+    // Workspaces that exist locally but NOT on remote.
+    // These are local-only or have never been pushed yet — leave them untouched.
+    // We do NOT disable sync_enabled or delete them; that would destroy data
+    // that simply hasn't been pushed yet.
+    for (_id, ws) in local_map {
+        resolved.push(ws);
     }
-    
-    Ok(resolved_workspaces)
+
+    Ok(resolved)
 }
 
+// ─── Server merge ───────────────────────────────────────────────────────────
 
-pub async fn get_local_servers(state: &State<'_, AppState>) -> Result<Vec<CRDTServer>> {
-    let local_servers = sqlx::query("SELECT * FROM servers")
-        .fetch_all(&state.db.pool)
-        .await?;
-        
-    let mut results = Vec::new();
-    for row in local_servers {
-        let id: Uuid = row.get("id");
-        let id_str = id.to_string();
-        let workspace_id: Uuid = row.get("workspace_id");
-        let workspace_id_str = workspace_id.to_string();
-        let name: String = row.get("name");
-        let host: String = row.get("host");
-        let port: i64 = row.get("port");
-        let username: String = row.get("username");
-        let tags: String = row.get("tags");
-        let password_enc: Option<String> = row.get("password_enc");
-        let hlc: String = row.get("hlc");
-        let deleted: bool = row.get("deleted");
-        
-        results.push(CRDTServer {
-            id: id_str, workspace_id: workspace_id_str, name, host, port: port as u16, username, tags, password_enc, hlc, deleted
-        });
-    }
-    Ok(results)
-}
-
+/// Merge remote servers into the local SQLite database using LWW / HLC.
+///
+/// `pulled_workspace_ids` limits the scope of the merge: only servers that
+/// belong to workspaces we actually received from the remote are candidates.
+/// This protects servers in non-synced / local-only workspaces from being
+/// touched.
 pub async fn merge_servers(
-    state: &State<'_, AppState>, 
-    remote_servers: Vec<CRDTServer>, 
-    pulled_workspace_ids: &std::collections::HashSet<String>
+    state: &State<'_, AppState>,
+    remote_servers: Vec<CRDTServer>,
+    pulled_workspace_ids: &std::collections::HashSet<String>,
 ) -> Result<Vec<CRDTServer>> {
-    let mut resolved_servers = Vec::new();
-    
     let local_servers = get_local_servers(state).await?;
-        
-    let mut local_map = std::collections::HashMap::new();
-    for srv in local_servers {
-        // Only consider local servers that belong to workspaces we just pulled!
-        // This protects servers belonging to non-synced workspaces.
-        if pulled_workspace_ids.contains(&srv.workspace_id) {
-            local_map.insert(srv.id.clone(), srv);
-        }
-    }
+
+    // Build a map of only the local servers that belong to pulled workspaces.
+    let mut local_map: std::collections::HashMap<String, CRDTServer> = local_servers
+        .into_iter()
+        .filter(|s| pulled_workspace_ids.contains(&s.workspace_id))
+        .map(|s| (s.id.clone(), s))
+        .collect();
+
+    let mut resolved: Vec<CRDTServer> = Vec::new();
 
     for remote in remote_servers {
-        if let Some(_) = local_map.get(&remote.id) {
-            let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
-            // Remote wins unconditionally on pull
-            sqlx::query("UPDATE servers SET name = ?, host = ?, port = ?, username = ?, tags = ?, password_enc = ?, hlc = ?, deleted = ? WHERE id = ?")
+        if let Some(local) = local_map.remove(&remote.id) {
+            let local_hlc = HLC::parse(&local.hlc);
+            let remote_hlc = HLC::parse(&remote.hlc);
+
+            if remote_hlc > local_hlc {
+                // Remote wins — update metadata but KEEP the local password_enc
+                // because the remote payload never carries passwords.
+                let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
+                sqlx::query(
+                    "UPDATE servers SET name = ?, host = ?, port = ?, username = ?, tags = ?, \
+                     hlc = ?, deleted = ? WHERE id = ?",
+                )
                 .bind(&remote.name)
                 .bind(&remote.host)
                 .bind(remote.port)
                 .bind(&remote.username)
                 .bind(&remote.tags)
-                .bind(&remote.password_enc)
                 .bind(&remote.hlc)
                 .bind(remote.deleted)
-                .bind(&remote_id)
+                .bind(remote_id)
                 .execute(&state.db.pool)
                 .await?;
-            resolved_servers.push(remote.clone());
-            local_map.remove(&remote.id);
+
+                tracing::debug!(
+                    "merge_servers: id={} remote wins (local={}, remote={})",
+                    remote.id,
+                    local.hlc,
+                    remote.hlc,
+                );
+
+                // Return the merged view: remote metadata, local password kept
+                let mut merged = remote.clone();
+                merged.password_enc = local.password_enc;
+                resolved.push(merged);
+            } else {
+                // Local wins — keep everything as-is
+                tracing::debug!(
+                    "merge_servers: id={} local wins (local={}, remote={})",
+                    local.id,
+                    local.hlc,
+                    remote.hlc,
+                );
+                resolved.push(local);
+            }
         } else {
+            // New server from remote — insert (without password)
             let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
             let remote_ws_id = Uuid::parse_str(&remote.workspace_id).unwrap_or_default();
-            // New remote server
-            sqlx::query("INSERT INTO servers (id, workspace_id, name, host, port, username, tags, password_enc, hlc, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                .bind(&remote_id)
-                .bind(&remote_ws_id)
+            sqlx::query(
+                "INSERT INTO servers (id, workspace_id, name, host, port, username, tags, password_enc, hlc, deleted) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)"
+            )
+                .bind(remote_id)
+                .bind(remote_ws_id)
                 .bind(&remote.name)
                 .bind(&remote.host)
                 .bind(remote.port)
                 .bind(&remote.username)
                 .bind(&remote.tags)
-                .bind(&remote.password_enc)
                 .bind(&remote.hlc)
                 .bind(remote.deleted)
                 .execute(&state.db.pool)
                 .await?;
-            resolved_servers.push(remote);
+
+            tracing::info!(
+                "merge_servers: inserted new remote server '{}' (host={})",
+                remote.name,
+                remote.host,
+            );
+            resolved.push(remote);
         }
     }
-    
-    for (id_str, _) in local_map {
-        let id_uuid = Uuid::parse_str(&id_str).unwrap_or_default();
-        sqlx::query("DELETE FROM servers WHERE id = ?").bind(&id_uuid).execute(&state.db.pool).await?;
+
+    // Servers that exist locally for pulled workspaces but are NOT on the remote.
+    // Instead of hard-deleting (which violates the soft-delete convention and
+    // destroys data), we soft-delete them — the remote is considered the source
+    // of truth for the set of servers within synced workspaces.
+    for (id_str, local_srv) in &local_map {
+        if !local_srv.deleted {
+            let id_uuid = Uuid::parse_str(id_str).unwrap_or_default();
+            let hlc = HLC::now(&state.node_id).to_string_repr();
+            sqlx::query("UPDATE servers SET deleted = 1, hlc = ? WHERE id = ?")
+                .bind(&hlc)
+                .bind(id_uuid)
+                .execute(&state.db.pool)
+                .await?;
+            tracing::info!(
+                "merge_servers: soft-deleted local server '{}' (not present in remote)",
+                local_srv.name,
+            );
+        }
     }
-    
-    Ok(resolved_servers)
+
+    // Include the (now soft-deleted) leftovers in the resolved set
+    for (_id, srv) in local_map {
+        resolved.push(srv);
+    }
+
+    Ok(resolved)
 }
