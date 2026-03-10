@@ -1,5 +1,6 @@
 use crate::services::crypto::CryptoService;
 use crate::services::db::DbService;
+use crate::services::pty::PtyService;
 use crate::services::sftp::SftpService;
 use crate::services::ssh::SshService;
 use tauri::Manager;
@@ -8,6 +9,7 @@ pub struct AppState {
     pub db: DbService,
     pub ssh: SshService,
     pub sftp: SftpService,
+    pub pty: PtyService,
     pub crypto: CryptoService,
     pub sync_lock: tokio::sync::Mutex<()>,
 }
@@ -41,6 +43,7 @@ pub fn run() {
                     db,
                     ssh: SshService::new(),
                     sftp: SftpService::new(),
+                    pty: PtyService::new(),
                     crypto,
                     sync_lock: tokio::sync::Mutex::new(()),
                 });
@@ -60,6 +63,7 @@ pub fn run() {
             handlers::server::get_server_password,
             handlers::ssh::ssh_connect,
             handlers::ssh::ssh_write,
+            handlers::ssh::ssh_resize,
             handlers::ssh::ssh_disconnect,
             handlers::sftp::sftp_open_session,
             handlers::sftp::sftp_list_dir,
@@ -85,6 +89,10 @@ pub fn run() {
             handlers::auth::github_login,
             handlers::auth::get_current_user,
             handlers::auth::github_logout,
+            handlers::pty::pty_spawn,
+            handlers::pty::pty_write,
+            handlers::pty::pty_resize,
+            handlers::pty::pty_kill,
             sync::pull_workspace,
             sync::push_workspace,
         ])
@@ -92,8 +100,8 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+pub mod auth;
 pub mod handlers;
 pub mod models;
 pub mod services;
 pub mod sync;
-pub mod auth;

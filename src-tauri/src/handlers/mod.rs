@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod pty;
 pub mod server;
 pub mod sftp;
 pub mod ssh;

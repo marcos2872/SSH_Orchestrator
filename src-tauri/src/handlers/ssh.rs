@@ -4,6 +4,8 @@ use uuid::Uuid;
 
 /// Establish an SSH session for a server. If `password` is None and the server
 /// has a saved password, it is automatically decrypted and used.
+///
+/// `cols` and `rows` set the initial PTY dimensions. If omitted, defaults to 80×24.
 #[tauri::command]
 pub async fn ssh_connect(
     state: State<'_, AppState>,
@@ -11,16 +13,16 @@ pub async fn ssh_connect(
     server_id: String,
     password: Option<String>,
     session_id: String,
+    cols: Option<u32>,
+    rows: Option<u32>,
 ) -> Result<String, String> {
     let srv_uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
 
-    let row = sqlx::query_as::<_, crate::models::ServerRow>(
-        "SELECT * FROM servers WHERE id = ?",
-    )
-    .bind(srv_uuid)
-    .fetch_one(&state.db.pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row = sqlx::query_as::<_, crate::models::ServerRow>("SELECT * FROM servers WHERE id = ?")
+        .bind(srv_uuid)
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let server = row.into_server();
 
@@ -45,7 +47,16 @@ pub async fn ssh_connect(
 
     state
         .ssh
-        .connect(app, &server.host, server.port, &server.username, &resolved_password, session_id)
+        .connect(
+            app,
+            &server.host,
+            server.port,
+            &server.username,
+            &resolved_password,
+            session_id,
+            cols,
+            rows,
+        )
         .await
         .map_err(|e| e.to_string())
 }
@@ -63,11 +74,23 @@ pub async fn ssh_write(
         .map_err(|e| e.to_string())
 }
 
+/// Notify the remote PTY of a terminal resize (cols × rows).
 #[tauri::command]
-pub async fn ssh_disconnect(
+pub async fn ssh_resize(
     state: State<'_, AppState>,
     session_id: String,
+    cols: u32,
+    rows: u32,
 ) -> Result<(), String> {
+    state
+        .ssh
+        .resize(&session_id, cols, rows)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ssh_disconnect(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
     state
         .ssh
         .disconnect(&session_id)

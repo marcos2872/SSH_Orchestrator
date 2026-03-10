@@ -9,7 +9,6 @@ use russh::{
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, Mutex};
-use uuid::Uuid;
 
 // ─── Minimal russh client handler ─────────────────────────────────────────────
 // Data routing is handled by the channel.wait() loop below, not the handler.
@@ -29,13 +28,22 @@ impl client::Handler for SshClientHandler {
     }
 }
 
+// ─── Messages sent from IPC handlers to the background SSH task ───────────────
+
+enum SessionMsg {
+    /// Raw bytes to write to the remote shell's stdin
+    Data(Vec<u8>),
+    /// Notify the remote PTY of a terminal resize
+    Resize { cols: u32, rows: u32 },
+}
+
 // ─── Session state ────────────────────────────────────────────────────────────
 
 struct SshSession {
     /// Used for clean disconnection and SFTP channel sharing
     handle: Arc<Mutex<Handle<SshClientHandler>>>,
-    /// Send bytes here to write them to the remote shell
-    writer_tx: mpsc::UnboundedSender<Vec<u8>>,
+    /// Send messages (data or resize) to the background task
+    msg_tx: mpsc::UnboundedSender<SessionMsg>,
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -62,6 +70,8 @@ impl SshService {
     /// Establish an SSH session with password auth, open an interactive PTY shell,
     /// and spawn a background task that emits `ssh://data/<session_id>` Tauri events.
     ///
+    /// `cols` and `rows` set the initial PTY size. If not provided, defaults to 80×24.
+    ///
     /// Returns the `session_id` on success.
     pub async fn connect(
         &self,
@@ -71,7 +81,12 @@ impl SshService {
         username: &str,
         password: &str,
         session_id: String,
+        cols: Option<u32>,
+        rows: Option<u32>,
     ) -> Result<String> {
+        let initial_cols = cols.unwrap_or(80);
+        let initial_rows = rows.unwrap_or(24);
+
         let config = std::sync::Arc::new(client::Config::default());
         let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
 
@@ -91,8 +106,8 @@ impl SshService {
             .request_pty(
                 true,
                 "xterm-256color",
-                220, // cols
-                50,  // rows
+                initial_cols,
+                initial_rows,
                 0,
                 0,
                 &[],
@@ -101,11 +116,11 @@ impl SshService {
 
         channel.request_shell(false).await?;
 
-        // Channel for sending keystroke data from ssh_write to the background task
-        let (writer_tx, mut writer_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        // Channel for sending messages (keystrokes + resize) from IPC handlers to the background task
+        let (msg_tx, mut msg_rx) = mpsc::unbounded_channel::<SessionMsg>();
 
         // Background task: forward server output → Tauri events, and
-        // forward keystrokes from writer_rx → remote shell
+        // forward keystrokes/resize from msg_rx → remote shell
         let sid = session_id.clone();
         let app_clone = app.clone();
         tokio::spawn(async move {
@@ -136,13 +151,17 @@ impl SshService {
                         }
                     }
 
-                    // Keystrokes from the frontend → send to remote shell
-                    data = writer_rx.recv() => {
-                        match data {
-                            Some(bytes) => {
+                    // Messages from the frontend (keystrokes or resize) → send to remote
+                    session_msg = msg_rx.recv() => {
+                        match session_msg {
+                            Some(SessionMsg::Data(bytes)) => {
                                 if channel.data(bytes.as_ref()).await.is_err() {
                                     break;
                                 }
+                            }
+                            Some(SessionMsg::Resize { cols, rows }) => {
+                                // Notify the remote PTY of the new terminal dimensions
+                                let _ = channel.window_change(cols, rows, 0, 0).await;
                             }
                             // Sender dropped (ssh_disconnect called) → exit task
                             None => break,
@@ -156,7 +175,7 @@ impl SshService {
             session_id.clone(),
             SshSession {
                 handle: Arc::new(Mutex::new(handle)),
-                writer_tx,
+                msg_tx,
             },
         );
 
@@ -171,8 +190,21 @@ impl SshService {
             .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SSH não encontrada: {}", session_id))?;
         session
-            .writer_tx
-            .send(bytes)
+            .msg_tx
+            .send(SessionMsg::Data(bytes))
+            .map_err(|_| anyhow!("Canal de escrita fechado para sessão: {}", session_id))?;
+        Ok(())
+    }
+
+    /// Notify the remote PTY of a terminal resize.
+    pub async fn resize(&self, session_id: &str, cols: u32, rows: u32) -> Result<()> {
+        let session = self
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| anyhow!("Sessão SSH não encontrada: {}", session_id))?;
+        session
+            .msg_tx
+            .send(SessionMsg::Resize { cols, rows })
             .map_err(|_| anyhow!("Canal de escrita fechado para sessão: {}", session_id))?;
         Ok(())
     }
@@ -180,8 +212,8 @@ impl SshService {
     /// Disconnect and remove the session.
     pub async fn disconnect(&self, session_id: &str) -> Result<()> {
         if let Some((_, session)) = self.sessions.remove(session_id) {
-            // Dropping writer_tx closes the mpsc channel → background task exits cleanly
-            drop(session.writer_tx);
+            // Dropping msg_tx closes the mpsc channel → background task exits cleanly
+            drop(session.msg_tx);
             let _ = session
                 .handle
                 .lock()
