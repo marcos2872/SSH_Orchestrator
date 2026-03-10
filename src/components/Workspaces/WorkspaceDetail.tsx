@@ -20,6 +20,7 @@ import Modal from "../Modal";
 interface Props {
   workspace: { id: string; name: string; color: string };
   onConnect: (server: Server) => void;
+  onSftp: (server: Server) => void;
   onOpenLocal: () => void;
   onWorkspaceUpdated: (ws: { id: string; name: string; color: string }) => void;
   onWorkspaceDeleted: () => void;
@@ -39,6 +40,7 @@ const COLORS = [
 const WorkspaceDetail: React.FC<Props> = ({
   workspace,
   onConnect,
+  onSftp,
   onOpenLocal,
   onWorkspaceUpdated,
   onWorkspaceDeleted,
@@ -245,10 +247,8 @@ const WorkspaceDetail: React.FC<Props> = ({
                     <TerminalIcon className="w-3 h-3" /> Connect
                   </button>
                   <button
-                    onClick={() =>
-                      toast.info("SFTP estará disponível na Phase 0.4 🚀")
-                    }
-                    title="SFTP (Phase 0.4)"
+                    onClick={() => onSftp(server)}
+                    title="SFTP"
                     className="px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
                   >
                     <HardDrive className="w-3 h-3" />

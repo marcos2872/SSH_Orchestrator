@@ -59,6 +59,13 @@ const App: React.FC = () => {
     [openTab],
   );
 
+  const handleSftp = useCallback(
+    (server: Server) => {
+      openSftpTab(server);
+    },
+    [openSftpTab],
+  );
+
   const handlePickServer = (srv: ApiServer) => {
     if (pickerMode === "sftp") {
       openSftpTab(srv as Server);
@@ -152,6 +159,7 @@ const App: React.FC = () => {
                     <WorkspaceDetail
                       workspace={selectedWorkspace}
                       onConnect={handleConnect}
+                      onSftp={handleSftp}
                       onOpenLocal={openLocalTab}
                       onWorkspaceUpdated={setSelectedWorkspace}
                       onWorkspaceDeleted={() => {
