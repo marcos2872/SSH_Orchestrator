@@ -86,6 +86,7 @@ pub fn run() {
             handlers::vault::setup_vault,
             handlers::vault::check_synced_vault,
             handlers::vault::import_synced_vault,
+            handlers::vault::get_vault_last_access,
             handlers::auth::github_login,
             handlers::auth::get_current_user,
             handlers::auth::github_logout,
