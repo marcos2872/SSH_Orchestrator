@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ssh-orchestrator",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "identifier": "com.marcos.ssh",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -37,10 +37,7 @@
     ],
     "windows": {
       "nsis": {
-        "languages": [
-          "English",
-          "PortugueseBrazilian"
-        ]
+        "languages": ["English", "PortugueseBrazilian"]
       }
     },
     "macOS": {
@@ -48,8 +45,7 @@
     },
     "linux": {
       "deb": {},
-      "rpm": {},
-      "appimage": {}
+      "rpm": {}
     }
   }
 }
