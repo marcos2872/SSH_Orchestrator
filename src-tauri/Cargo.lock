@@ -5677,7 +5677,7 @@ dependencies = [
 
 [[package]]
 name = "ssh-orchestrator"
-version = "0.0.1"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
