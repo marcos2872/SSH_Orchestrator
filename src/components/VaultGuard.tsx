@@ -448,7 +448,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
 
   if (flowState === "loading") {
     return (
-      <div className="flex flex-col h-screen w-screen z-[9999] absolute inset-0" style={{ background: "#000" }}>
+      <div className="flex flex-col h-full w-full z-[9999]" style={{ background: "#000" }}>
         <WindowControls />
         <div className="flex flex-1 items-center justify-center">
           <div
@@ -462,7 +462,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
 
   return (
     <div
-      className="flex flex-col h-screen w-screen z-[9999] absolute inset-0"
+      className="flex flex-col h-full w-full z-[9999]"
       style={{ background: "#000" }}
     >
       <style>{`

@@ -2,15 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  height: 100%;
+  background: transparent;
+}
+
 body {
   margin: 0;
-  /* SF Pro quando disponível no macOS, Inter como fallback de alta qualidade */
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  color: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Inter", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
   background-color: #000000;
-  color: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  /* Borda sutil estilo Apple */
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
 }
 
 /* ─── Custom TitleBar ─────────────────────────────────────────── */
