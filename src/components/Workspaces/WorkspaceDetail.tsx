@@ -12,6 +12,7 @@ import {
   Save,
   Pencil,
   Lock,
+  Key,
 } from "lucide-react";
 import { useToast } from "../../hooks/useToast";
 import AddServerModal from "../Servers/AddServerModal";
@@ -217,6 +218,14 @@ const WorkspaceDetail: React.FC<Props> = ({
                         className="p-1 text-green-500/70"
                       >
                         <Lock className="w-3 h-3" />
+                      </span>
+                    )}
+                    {server.has_saved_ssh_key && (
+                      <span
+                        title="Chave SSH salva"
+                        className="p-1 text-blue-400/70"
+                      >
+                        <Key className="w-3 h-3" />
                       </span>
                     )}
                     <button

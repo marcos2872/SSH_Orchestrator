@@ -3,9 +3,10 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use dashmap::DashMap;
 use russh::{
     client::{self, Handle},
-    keys::PublicKey,
+    keys::{decode_secret_key, key::PrivateKeyWithHashAlg},
     ChannelMsg, Disconnect,
 };
+use russh::keys::PublicKey;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, Mutex};
@@ -52,6 +53,32 @@ pub struct SshService {
     sessions: DashMap<String, SshSession>,
 }
 
+// ─── Auth helper ─────────────────────────────────────────────────────────────
+
+/// Parse a PEM private key and authenticate the SSH handle with it.
+/// `passphrase` is optional (for password-protected keys).
+pub async fn authenticate_with_key(
+    handle: &mut Handle<SshClientHandler>,
+    username: &str,
+    key_pem: &str,
+    passphrase: Option<&str>,
+) -> Result<()> {
+    let private_key = decode_secret_key(key_pem, passphrase)
+        .map_err(|e| anyhow!("Falha ao decodificar chave SSH: {}", e))?;
+
+    let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(private_key), None);
+    let auth_result = handle
+        .authenticate_publickey(username, key_with_hash)
+        .await?;
+
+    if !matches!(auth_result, russh::client::AuthResult::Success) {
+        return Err(anyhow!(
+            "Autenticação por chave SSH falhou: chave rejeitada pelo servidor"
+        ));
+    }
+    Ok(())
+}
+
 impl SshService {
     pub fn new() -> Self {
         Self {
@@ -67,19 +94,24 @@ impl SshService {
         self.sessions.get(session_id).map(|s| Arc::clone(&s.handle))
     }
 
-    /// Establish an SSH session with password auth, open an interactive PTY shell,
-    /// and spawn a background task that emits `ssh://data/<session_id>` Tauri events.
+    /// Establish an SSH session, open an interactive PTY shell, and spawn a
+    /// background task that emits `ssh://data/<session_id>` Tauri events.
     ///
-    /// `cols` and `rows` set the initial PTY size. If not provided, defaults to 80×24.
+    /// Authentication priority:
+    ///   1. `ssh_key` (inline PEM) + optional `ssh_key_passphrase`
+    ///   2. `password` (plain text)
     ///
     /// Returns the `session_id` on success.
+    #[allow(clippy::too_many_arguments)]
     pub async fn connect(
         &self,
         app: AppHandle,
         host: &str,
         port: u16,
         username: &str,
-        password: &str,
+        password: Option<&str>,
+        ssh_key: Option<&str>,
+        ssh_key_passphrase: Option<&str>,
         session_id: String,
         cols: Option<u32>,
         rows: Option<u32>,
@@ -90,11 +122,21 @@ impl SshService {
         let config = std::sync::Arc::new(client::Config::default());
         let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
 
-        let auth_result = handle.authenticate_password(username, password).await?;
-
-        if !matches!(auth_result, russh::client::AuthResult::Success) {
+        // ── Authenticate ────────────────────────────────────────────────────
+        if let Some(key_pem) = ssh_key {
+            // Prefer SSH key auth
+            authenticate_with_key(&mut handle, username, key_pem, ssh_key_passphrase).await?;
+        } else if let Some(pw) = password {
+            // Fall back to password auth
+            let auth_result = handle.authenticate_password(username, pw).await?;
+            if !matches!(auth_result, russh::client::AuthResult::Success) {
+                return Err(anyhow!(
+                    "Autenticação SSH falhou: usuário ou senha incorretos"
+                ));
+            }
+        } else {
             return Err(anyhow!(
-                "Autenticação SSH falhou: usuário ou senha incorretos"
+                "Nenhuma credencial fornecida (senha ou chave SSH necessária)"
             ));
         }
 

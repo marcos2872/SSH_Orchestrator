@@ -43,11 +43,12 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
         <div
             ref={overlayRef}
             onClick={handleOverlayClick}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 p-4"
+            style={{ top: 'var(--titlebar-height)' }}
         >
-            <div className={`bg-slate-900 border border-slate-700 rounded-2xl p-8 shadow-2xl ${width} animate-in zoom-in-95 duration-200`}>
+            <div className={`bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl ${width} max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200`}>
                 {title && (
-                    <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center justify-between px-8 pt-8 pb-6 shrink-0">
                         <div className="flex items-center gap-3">
                             {icon && (
                                 <div className="p-2 bg-blue-500/10 rounded-lg">
@@ -63,7 +64,9 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
                         </button>
                     </div>
                 )}
-                {children}
+                <div className={`overflow-y-auto flex-1 min-h-0 px-8 pb-8 ${!title ? 'pt-8' : ''}`}>
+                    {children}
+                </div>
             </div>
         </div>
     );

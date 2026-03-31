@@ -7,6 +7,8 @@ export interface Server {
   port: number;
   username: string;
   has_saved_password: boolean;
+  has_saved_ssh_key: boolean;
+  has_saved_ssh_key_passphrase: boolean;
 }
 
 export type SplitMode = "none" | "horizontal" | "vertical";

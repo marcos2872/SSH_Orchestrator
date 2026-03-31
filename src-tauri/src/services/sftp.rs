@@ -9,7 +9,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::services::ssh::SshClientHandler;
+use crate::services::ssh::{authenticate_with_key, SshClientHandler};
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -72,19 +72,35 @@ impl SftpService {
 
     /// Create a direct SSH + SFTP connection (no PTY/shell) for the dual-pane file manager.
     /// Returns the SFTP session ID.
+    ///
+    /// Authentication priority:
+    ///   1. `ssh_key` (inline PEM) + optional `ssh_key_passphrase`
+    ///   2. `password` (plain text)
     pub async fn open_direct(
         &self,
         host: &str,
         port: u16,
         username: &str,
-        password: &str,
+        password: Option<&str>,
+        ssh_key: Option<&str>,
+        ssh_key_passphrase: Option<&str>,
     ) -> Result<String> {
         let config = Arc::new(client::Config::default());
         let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
-        let auth = handle.authenticate_password(username, password).await?;
-        if !matches!(auth, russh::client::AuthResult::Success) {
-            return Err(anyhow!("Autenticação SSH falhou"));
+
+        if let Some(key_pem) = ssh_key {
+            authenticate_with_key(&mut handle, username, key_pem, ssh_key_passphrase).await?;
+        } else if let Some(pw) = password {
+            let auth = handle.authenticate_password(username, pw).await?;
+            if !matches!(auth, russh::client::AuthResult::Success) {
+                return Err(anyhow!("Autenticação SSH falhou"));
+            }
+        } else {
+            return Err(anyhow!(
+                "Nenhuma credencial fornecida (senha ou chave SSH necessária)"
+            ));
         }
+
         let channel = handle.channel_open_session().await?;
         channel.request_subsystem(true, "sftp").await?;
         let session = SftpSession::new(channel.into_stream()).await?;

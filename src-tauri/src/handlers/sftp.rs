@@ -5,13 +5,13 @@ use tauri::State;
 #[tauri::command]
 pub async fn sftp_open_session(
     state: State<'_, AppState>,
-    server_id: String,
+    session_id: String,
 ) -> Result<String, String> {
     let handle = state
         .ssh
-        .get_handle(&server_id)
+        .get_handle(&session_id)
         .await
-        .ok_or_else(|| format!("Sessão SSH ativa não encontrada para servidor: {}", server_id))?;
+        .ok_or_else(|| format!("Sessão SSH ativa não encontrada: {}", session_id))?;
 
     state
         .sftp
@@ -21,17 +21,81 @@ pub async fn sftp_open_session(
 }
 
 /// Connect directly via SSH+SFTP without spawning a shell (dual-pane file manager).
+///
+/// Looks up the server by `server_id`, then resolves credentials in the same
+/// priority order as `ssh_connect`:
+///   1. Saved encrypted SSH key from DB (decrypted via vault)
+///   2. Caller-supplied `password` (typed by the user at the prompt)
+///   3. Saved encrypted password from DB (decrypted via vault)
 #[tauri::command]
 pub async fn sftp_direct_connect(
     state: State<'_, AppState>,
-    host: String,
-    port: u16,
-    username: String,
-    password: String,
+    server_id: String,
+    password: Option<String>,
 ) -> Result<String, String> {
+    use uuid::Uuid;
+
+    let srv_uuid = Uuid::parse_str(&server_id).map_err(|e| e.to_string())?;
+
+    let row = sqlx::query_as::<_, crate::models::ServerRow>("SELECT * FROM servers WHERE id = ?")
+        .bind(srv_uuid)
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // ── Resolve SSH key ───────────────────────────────────────────────────────
+    let resolved_key: Option<String> = match row.ssh_key_enc.as_deref() {
+        Some(enc) => {
+            let plain = state.crypto.decrypt(enc).map_err(|e| e.to_string())?;
+            Some(plain)
+        }
+        None => None,
+    };
+
+    let resolved_passphrase: Option<String> = if resolved_key.is_some() {
+        match row.ssh_key_passphrase_enc.as_deref() {
+            Some(enc) => {
+                let plain = state.crypto.decrypt(enc).map_err(|e| e.to_string())?;
+                Some(plain)
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+
+    // ── Resolve password (fallback when no key) ───────────────────────────────
+    let resolved_password: Option<String> = if resolved_key.is_none() {
+        match password.as_deref() {
+            Some(pw) if !pw.is_empty() => Some(pw.to_string()),
+            _ => match row.password_enc.as_deref() {
+                Some(enc) => {
+                    let plain = state.crypto.decrypt(enc).map_err(|e| e.to_string())?;
+                    Some(plain)
+                }
+                None => None,
+            },
+        }
+    } else {
+        None
+    };
+
+    if resolved_key.is_none() && resolved_password.is_none() {
+        return Err(
+            "Nenhuma credencial disponível. Forneça uma senha ou chave SSH.".to_string(),
+        );
+    }
+
     state
         .sftp
-        .open_direct(&host, port, &username, &password)
+        .open_direct(
+            &row.host,
+            row.port as u16,
+            &row.username,
+            resolved_password.as_deref(),
+            resolved_key.as_deref(),
+            resolved_passphrase.as_deref(),
+        )
         .await
         .map_err(|e| e.to_string())
 }

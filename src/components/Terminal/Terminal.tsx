@@ -23,6 +23,8 @@ interface Server {
   port: number;
   username: string;
   has_saved_password: boolean;
+  has_saved_ssh_key: boolean;
+  has_saved_ssh_key_passphrase: boolean;
 }
 
 interface Props {
@@ -56,8 +58,9 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
     const onDataDisposableRef = useRef<IDisposable | null>(null);
     const onResizeDisposableRef = useRef<IDisposable | null>(null);
 
+    const hasSavedCredential = server.has_saved_password || server.has_saved_ssh_key;
     const [connState, setConnState] = useState<ConnectionState>(
-      server.has_saved_password ? "loading" : "prompt",
+      hasSavedCredential ? "loading" : "prompt",
     );
     const [password, setPassword] = useState("");
     const passwordRef = useRef<HTMLInputElement>(null);
@@ -131,10 +134,10 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
     // ── Auto-connect ──────────────────────────────────────────────────────────
     useEffect(() => {
       let timer: ReturnType<typeof setTimeout>;
-      if (server.has_saved_password) {
+      if (server.has_saved_password || server.has_saved_ssh_key) {
         // Um pequeno delay evita os problemas do React Strict Mode
         timer = setTimeout(() => {
-          connectWithPassword(null);
+          connectWithSavedCredential();
         }, 150);
       }
       return () => clearTimeout(timer);
@@ -166,14 +169,20 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
       }
     };
 
+    const connectWithSavedCredential = () => connectWithPassword(null);
+
     const connectWithPassword = async (pw: string | null) => {
       const term = xtermRef.current;
       setConnState("connecting");
       term?.writeln(
         `\x1b[1;34m[*] Conectando a ${server.username}@${server.host}:${server.port}...\x1b[0m`,
       );
-      if (server.has_saved_password && pw === null) {
-        term?.writeln("\x1b[2m[🔒 Usando senha salva...]\x1b[0m");
+      if (pw === null) {
+        if (server.has_saved_ssh_key) {
+          term?.writeln("\x1b[2m[Usando chave SSH salva...]\x1b[0m");
+        } else if (server.has_saved_password) {
+          term?.writeln("\x1b[2m[Usando senha salva...]\x1b[0m");
+        }
       }
       try {
         const sessionId = crypto.randomUUID();
@@ -222,11 +231,12 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
       onClose();
     };
 
-    const handleReconnect = () => {
+    const handleReconnect = async () => {
       setPassword("");
-      if (server.has_saved_password) {
+      await cleanupSession();
+      if (server.has_saved_password || server.has_saved_ssh_key) {
         setConnState("loading");
-        connectWithPassword(null);
+        connectWithSavedCredential();
       } else setConnState("prompt");
     };
 
@@ -258,7 +268,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
               />
             </div>
             <p className="text-xs text-slate-600 mb-4">
-              💡 Edite o servidor e ative "Salvar senha" para se conectar sem
+              Edite o servidor para salvar uma senha ou chave SSH e conectar sem
               digitar sempre.
             </p>
             <div className="flex gap-3">

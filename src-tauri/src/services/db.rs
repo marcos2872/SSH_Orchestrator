@@ -65,6 +65,12 @@ impl DbService {
         sqlx::query("ALTER TABLE servers ADD COLUMN hlc TEXT NOT NULL DEFAULT ''").execute(&pool).await.ok();
         sqlx::query("ALTER TABLE servers ADD COLUMN deleted BOOLEAN NOT NULL DEFAULT 0").execute(&pool).await.ok();
 
+        // Migration: SSH key authentication fields
+        sqlx::query("ALTER TABLE servers ADD COLUMN ssh_key_enc TEXT")
+            .execute(&pool).await.ok();
+        sqlx::query("ALTER TABLE servers ADD COLUMN ssh_key_passphrase_enc TEXT")
+            .execute(&pool).await.ok();
+
         Ok(Self { pool })
     }
 }

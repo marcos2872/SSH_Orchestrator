@@ -6,11 +6,15 @@ export const sshConnect = async (
   sessionId?: string,
   cols?: number,
   rows?: number,
+  sshKey?: string | null,
+  sshKeyPassphrase?: string | null,
 ): Promise<string> => {
   const sid = sessionId || crypto.randomUUID();
-  await invoke<void>("ssh_connect", {
+  await invoke<string>("ssh_connect", {
     serverId,
     password: password || null,
+    sshKey: sshKey || null,
+    sshKeyPassphrase: sshKeyPassphrase || null,
     sessionId: sid,
     cols: cols ?? null,
     rows: rows ?? null,

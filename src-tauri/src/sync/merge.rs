@@ -33,12 +33,17 @@ pub struct CRDTServer {
     pub port: u16,
     pub username: String,
     pub tags: String,
-    /// Always `None` in sync payloads — passwords are never transmitted between
-    /// devices because each vault has a different DEK.  Kept in the struct so
-    /// that `get_local_servers` can read the column without a separate type.
-    #[serde(skip_serializing)]
-    #[serde(default)]
+    /// AES-256-GCM encrypted password (using the shared vault DEK).
+    /// The vault DEK is synced across devices via `vault_sync.json`, so the
+    /// ciphertext is decryptable on any device that has the same master password.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password_enc: Option<String>,
+    /// AES-256-GCM encrypted SSH private key (PEM), using the shared vault DEK.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh_key_enc: Option<String>,
+    /// AES-256-GCM encrypted passphrase for the SSH private key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh_key_passphrase_enc: Option<String>,
     pub hlc: String,
     pub deleted: bool,
 }
@@ -84,6 +89,8 @@ pub async fn get_local_servers(state: &State<'_, AppState>) -> Result<Vec<CRDTSe
             username: row.get("username"),
             tags: row.get("tags"),
             password_enc: row.get("password_enc"),
+            ssh_key_enc: row.get("ssh_key_enc"),
+            ssh_key_passphrase_enc: row.get("ssh_key_passphrase_enc"),
             hlc: row.get("hlc"),
             deleted: row.get("deleted"),
         });
@@ -122,7 +129,8 @@ pub async fn merge_workspaces(
                 &local
             };
 
-            let winner_id = Uuid::parse_str(&winner.id).unwrap_or_default();
+            let winner_id = Uuid::parse_str(&winner.id)
+                .map_err(|e| anyhow::anyhow!("UUID inválido no merge de workspaces: {e}"))?;
             sqlx::query(
                 "UPDATE workspaces SET name = ?, color = ?, sync_enabled = ?, hlc = ?, deleted = ? WHERE id = ?"
             )
@@ -150,7 +158,8 @@ pub async fn merge_workspaces(
             resolved.push(winner.clone());
         } else {
             // New workspace from remote — insert it
-            let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
+            let remote_id = Uuid::parse_str(&remote.id)
+                .map_err(|e| anyhow::anyhow!("UUID inválido no merge de workspaces: {e}"))?;
             sqlx::query(
                 "INSERT INTO workspaces (id, name, color, sync_enabled, local_only, updated_at, hlc, deleted) \
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -176,8 +185,6 @@ pub async fn merge_workspaces(
 
     // Workspaces that exist locally but NOT on remote.
     // These are local-only or have never been pushed yet — leave them untouched.
-    // We do NOT disable sync_enabled or delete them; that would destroy data
-    // that simply hasn't been pushed yet.
     for (_id, ws) in local_map {
         resolved.push(ws);
     }
@@ -193,6 +200,10 @@ pub async fn merge_workspaces(
 /// belong to workspaces we actually received from the remote are candidates.
 /// This protects servers in non-synced / local-only workspaces from being
 /// touched.
+///
+/// Credentials (`password_enc`, `ssh_key_enc`, `ssh_key_passphrase_enc`) are
+/// included in the sync payload because the vault DEK is shared across devices
+/// via `vault_sync.json`. LWW applies to all fields including credentials.
 pub async fn merge_servers(
     state: &State<'_, AppState>,
     remote_servers: Vec<CRDTServer>,
@@ -215,18 +226,24 @@ pub async fn merge_servers(
             let remote_hlc = HLC::parse(&remote.hlc);
 
             if remote_hlc > local_hlc {
-                // Remote wins — update metadata but KEEP the local password_enc
-                // because the remote payload never carries passwords.
-                let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
+                // Remote wins — update all fields including credentials
+                let remote_id = Uuid::parse_str(&remote.id)
+                    .map_err(|e| anyhow::anyhow!("UUID inválido no merge de servidores: {e}"))?;
                 sqlx::query(
-                    "UPDATE servers SET name = ?, host = ?, port = ?, username = ?, tags = ?, \
-                     hlc = ?, deleted = ? WHERE id = ?",
+                    "UPDATE servers \
+                     SET name = ?, host = ?, port = ?, username = ?, tags = ?, \
+                         password_enc = ?, ssh_key_enc = ?, ssh_key_passphrase_enc = ?, \
+                         hlc = ?, deleted = ? \
+                     WHERE id = ?",
                 )
                 .bind(&remote.name)
                 .bind(&remote.host)
                 .bind(remote.port)
                 .bind(&remote.username)
                 .bind(&remote.tags)
+                .bind(&remote.password_enc)
+                .bind(&remote.ssh_key_enc)
+                .bind(&remote.ssh_key_passphrase_enc)
                 .bind(&remote.hlc)
                 .bind(remote.deleted)
                 .bind(remote_id)
@@ -240,10 +257,7 @@ pub async fn merge_servers(
                     remote.hlc,
                 );
 
-                // Return the merged view: remote metadata, local password kept
-                let mut merged = remote.clone();
-                merged.password_enc = local.password_enc;
-                resolved.push(merged);
+                resolved.push(remote);
             } else {
                 // Local wins — keep everything as-is
                 tracing::debug!(
@@ -255,12 +269,16 @@ pub async fn merge_servers(
                 resolved.push(local);
             }
         } else {
-            // New server from remote — insert (without password)
-            let remote_id = Uuid::parse_str(&remote.id).unwrap_or_default();
-            let remote_ws_id = Uuid::parse_str(&remote.workspace_id).unwrap_or_default();
+            // New server from remote — insert including credentials
+            let remote_id = Uuid::parse_str(&remote.id)
+                .map_err(|e| anyhow::anyhow!("UUID inválido no merge de servidores: {e}"))?;
+            let remote_ws_id = Uuid::parse_str(&remote.workspace_id)
+                .map_err(|e| anyhow::anyhow!("workspace_id UUID inválido no merge de servidores: {e}"))?;
             sqlx::query(
-                "INSERT INTO servers (id, workspace_id, name, host, port, username, tags, password_enc, hlc, deleted) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)"
+                "INSERT INTO servers \
+                 (id, workspace_id, name, host, port, username, tags, \
+                  password_enc, ssh_key_enc, ssh_key_passphrase_enc, hlc, deleted) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
                 .bind(remote_id)
                 .bind(remote_ws_id)
@@ -269,6 +287,9 @@ pub async fn merge_servers(
                 .bind(remote.port)
                 .bind(&remote.username)
                 .bind(&remote.tags)
+                .bind(&remote.password_enc)
+                .bind(&remote.ssh_key_enc)
+                .bind(&remote.ssh_key_passphrase_enc)
                 .bind(&remote.hlc)
                 .bind(remote.deleted)
                 .execute(&state.db.pool)
@@ -283,27 +304,11 @@ pub async fn merge_servers(
         }
     }
 
-    // Servers that exist locally for pulled workspaces but are NOT on the remote.
-    // Instead of hard-deleting (which violates the soft-delete convention and
-    // destroys data), we soft-delete them — the remote is considered the source
-    // of truth for the set of servers within synced workspaces.
-    for (id_str, local_srv) in &local_map {
-        if !local_srv.deleted {
-            let id_uuid = Uuid::parse_str(id_str).unwrap_or_default();
-            let hlc = HLC::now(&state.node_id).to_string_repr();
-            sqlx::query("UPDATE servers SET deleted = 1, hlc = ? WHERE id = ?")
-                .bind(&hlc)
-                .bind(id_uuid)
-                .execute(&state.db.pool)
-                .await?;
-            tracing::info!(
-                "merge_servers: soft-deleted local server '{}' (not present in remote)",
-                local_srv.name,
-            );
-        }
-    }
-
-    // Include the (now soft-deleted) leftovers in the resolved set
+    // Servers that exist locally but are NOT in the remote payload.
+    // Ausência no remoto significa "o remoto ainda não viu esse servidor" — não
+    // que foi deletado. Deleção é um evento explícito (deleted=1 com HLC).
+    // Deixamos intactos para serem incluídos no próximo push, igual ao
+    // comportamento de merge_workspaces.
     for (_id, srv) in local_map {
         resolved.push(srv);
     }

@@ -25,6 +25,7 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
     const [transfers, setTransfers] = useState<Transfer[]>([]);
     const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: SftpEntry } | null>(null);
     const [renaming, setRenaming] = useState<{ entry: SftpEntry; newName: string } | null>(null);
+    const [mkdirDialog, setMkdirDialog] = useState<{ open: boolean; value: string }>({ open: false, value: '' });
     const unlistenRef = useRef<(() => void) | null>(null);
 
     // ── Open SFTP session ──────────────────────────────────────────────────────
@@ -133,12 +134,16 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
         setCtxMenu(null);
     };
 
-    const handleMkdir = async () => {
+    const handleMkdir = () => {
         if (!sftpSessionId) return;
-        const name = prompt('Nome da nova pasta:');
-        if (!name) return;
+        setMkdirDialog({ open: true, value: '' });
+    };
+
+    const handleMkdirSubmit = async () => {
+        if (!sftpSessionId || !mkdirDialog.value.trim()) return;
+        setMkdirDialog({ open: false, value: '' });
         try {
-            await sftpMkdir(sftpSessionId, `${cwd.replace(/\/$/, '')}/${name}`);
+            await sftpMkdir(sftpSessionId, `${cwd.replace(/\/$/, '')}/${mkdirDialog.value.trim()}`);
             await listDir(cwd);
         } catch (e) { setError(String(e)); }
     };
@@ -308,6 +313,27 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
                         <div className="flex gap-2 mt-3">
                             <button onClick={() => setRenaming(null)} className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg transition-colors">Cancelar</button>
                             <button onClick={handleRenameSubmit} className="flex-1 py-1.5 bg-sky-600 hover:bg-sky-500 text-xs rounded-lg transition-colors">Renomear</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Mkdir dialog */}
+            {mkdirDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 shadow-2xl">
+                        <h3 className="text-sm font-semibold mb-3">Nova Pasta</h3>
+                        <input
+                            autoFocus
+                            value={mkdirDialog.value}
+                            onChange={e => setMkdirDialog(d => ({ ...d, value: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') handleMkdirSubmit(); if (e.key === 'Escape') setMkdirDialog({ open: false, value: '' }); }}
+                            placeholder="Nome da pasta"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                        <div className="flex gap-2 mt-3">
+                            <button onClick={() => setMkdirDialog({ open: false, value: '' })} className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg transition-colors">Cancelar</button>
+                            <button onClick={handleMkdirSubmit} disabled={!mkdirDialog.value.trim()} className="flex-1 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-xs rounded-lg transition-colors">Criar</button>
                         </div>
                     </div>
                 </div>

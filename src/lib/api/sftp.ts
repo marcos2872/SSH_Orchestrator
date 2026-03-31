@@ -16,8 +16,8 @@ export interface SftpProgress {
     bytes_total: number;
 }
 
-export const sftpOpenSession = (serverId: string) =>
-    invoke<string>('sftp_open_session', { serverId });
+export const sftpOpenSession = (sessionId: string) =>
+    invoke<string>('sftp_open_session', { sessionId });
 
 export const sftpListDir = (sessionId: string, path: string) =>
     invoke<SftpEntry[]>('sftp_list_dir', { sessionId, path });
@@ -46,9 +46,11 @@ export const onSftpProgress = (
     callback: (p: SftpProgress) => void,
 ) => listen<SftpProgress>(`sftp://progress/${sessionId}`, (e) => callback(e.payload));
 
-/** Connect SSH+SFTP directly without a shell (for dual-pane SFTP tab). */
-export const sftpDirectConnect = (host: string, port: number, username: string, password: string) =>
-    invoke<string>('sftp_direct_connect', { host, port, username, password });
+/** Connect SSH+SFTP directly without a shell (for dual-pane SFTP tab).
+ *  Credentials are resolved server-side from the vault.
+ *  Pass `password` only when the user types one at the manual prompt. */
+export const sftpDirectConnect = (serverId: string, password?: string | null) =>
+    invoke<string>('sftp_direct_connect', { serverId, password: password ?? null });
 
 export interface LocalEntry {
     name: string;

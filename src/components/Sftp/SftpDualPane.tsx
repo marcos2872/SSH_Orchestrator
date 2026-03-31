@@ -7,7 +7,6 @@ import {
     sftpDeleteLocal, sftpRenameLocal, sftpMkdirLocal,
     type SftpEntry, type LocalEntry, type SftpProgress,
 } from '../../lib/api/sftp';
-import { getServerPassword } from '../../lib/api/servers';
 import type { Server } from '../../hooks/useTerminalManager';
 import { FolderPlus, Trash2, Pencil, RefreshCw } from 'lucide-react';
 
@@ -196,6 +195,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
     const [sftp, setSftp] = useState<string | null>(null);
     const [connState, setConnState] = useState<'connecting' | 'prompt' | 'connected' | 'error'>('connecting');
     const [password, setPassword] = useState('');
+    const [connError, setConnError] = useState<string | null>(null);
     const pwInputRef = useRef<HTMLInputElement>(null);
 
     // Local pane
@@ -237,8 +237,8 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         description: '',
     });
 
-    // Track connection attempt to avoid loops
-    const connectAttempted = useRef(false);
+    // Used to cancel a doConnect in-flight when the component unmounts
+    const cancelConnectRef = useRef(false);
 
     // ── List local ───────────────────────────────────────────────────────────
     const listLocal = useCallback(async (path: string) => {
@@ -280,11 +280,19 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
     }, [sftp]);
 
     // ── Connect ───────────────────────────────────────────────────────────────
-    const doConnect = useCallback(async (pw: string) => {
+    // `pw` is only provided when the user types a password manually at the prompt.
+    // When null, the backend resolves credentials from the vault (saved password or SSH key).
+    const doConnect = useCallback(async (pw: string | null) => {
         if (sftp) return;
         setConnState('connecting');
+        setConnError(null);
         try {
-            const id = await sftpDirectConnect(server.host, server.port, server.username, pw);
+            const id = await sftpDirectConnect(server.id, pw);
+            if (cancelConnectRef.current) {
+                // Component unmounted during connect — close the session silently
+                sftpCloseSession(id);
+                return;
+            }
             setSftp(id);
             setConnState('connected');
 
@@ -308,48 +316,29 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 listRemote('/'); // fallback
             }
         } catch (e) {
+            if (cancelConnectRef.current) return; // ignore errors after unmount
             setConnState('error');
-            setLocalError(String(e));
-            connectAttempted.current = false;
+            setConnError(String(e));
         }
     }, [server, sftp, listRemote]);
 
     useEffect(() => {
-        if (connectAttempted.current) return;
-
-        if (server.has_saved_password) {
-            connectAttempted.current = true;
-            getServerPassword(server.id).then(pw => {
-                if (pw) doConnect(pw);
-                else {
-                    setConnState('prompt');
-                    connectAttempted.current = false;
-                }
-            }).catch(() => {
-                setConnState('prompt');
-                connectAttempted.current = false;
-            });
+        if (server.has_saved_password || server.has_saved_ssh_key) {
+            doConnect(null).catch(() => setConnState('prompt'));
         } else {
             setConnState('prompt');
         }
-    }, [server.id, server.has_saved_password, doConnect]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [server.id]);
 
-    // Explicit listRemote that takes a path but uses current sftp
-    const listRemotePath = useCallback(async (path: string) => {
-        if (!sftp) return;
-        setRemoteLoading(true);
-        setRemoteError(null);
-        try {
-            const entries = await sftpListDir(sftp, path);
-            setRemoteEntries(entries);
-            setRemoteCwd(path);
-        } catch (e) {
-            setRemoteError(String(e));
-        } finally {
-            setRemoteLoading(false);
-        }
-    }, [sftp]);
+    // ── Unmount cleanup — signal cancelConnectRef so in-flight connect aborts ──
+    useEffect(() => {
+        // Reset on mount (important for React Strict Mode double-invoke)
+        cancelConnectRef.current = false;
+        return () => { cancelConnectRef.current = true; };
+    }, []);
 
+    // ── Subscribe to transfer progress + cleanup session on unmount ───────────
     useEffect(() => {
         if (!sftp) return;
         const unlisten = onSftpProgress(sftp, (p) => {
@@ -429,7 +418,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                     const path = `${remoteCwd.replace(/\/$/, '')}/${value}`;
                     await sftpMkdir(sftp, path);
                 }
-                await listRemotePath(remoteCwd);
+                await listRemote(remoteCwd);
             }
         } catch (e) {
             const err = String(e);
@@ -519,7 +508,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-96 shadow-2xl">
                     <h3 className="text-lg font-semibold mb-1">Autenticação SFTP</h3>
                     <p className="text-sm text-slate-400 font-mono mb-5">{server.username}@{server.host}:{server.port}</p>
-                    {connState === 'error' && <p className="text-xs text-red-400 mb-3">{localError}</p>}
+                    {connState === 'error' && <p className="text-xs text-red-400 mb-3">{connError}</p>}
                     <label className="block text-xs text-slate-500 mb-1">Senha</label>
                     <input
                         ref={pwInputRef}
@@ -618,14 +607,14 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                         dropTarget={dropSide === 'remote'}
                         selected={remoteSelected}
                         onSelect={setRemoteSelected}
-                        onNavigate={listRemotePath}
+                        onNavigate={listRemote}
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                         onRename={handleRemoteRename}
                         onDelete={handleRemoteDelete}
                         onMkdir={handleRemoteMkdir}
-                        onRefresh={() => listRemotePath(remoteCwd)}
+                        onRefresh={() => listRemote(remoteCwd)}
                     />
                 </div>
             </div>

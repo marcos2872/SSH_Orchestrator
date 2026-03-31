@@ -66,7 +66,6 @@ pub fn run() {
             handlers::server::create_server,
             handlers::server::update_server,
             handlers::server::delete_server,
-            handlers::server::get_server_password,
             handlers::ssh::ssh_connect,
             handlers::ssh::ssh_write,
             handlers::ssh::ssh_resize,

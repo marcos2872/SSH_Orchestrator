@@ -7,6 +7,8 @@ export interface Server {
     port: number;
     username: string;
     has_saved_password: boolean;
+    has_saved_ssh_key: boolean;
+    has_saved_ssh_key_passphrase: boolean;
 }
 
 export const getServers = async (workspaceId: string): Promise<Server[]> => {
@@ -20,7 +22,11 @@ export const createServer = async (
     port: number,
     username: string,
     password?: string | null,
-    savePassword?: boolean
+    savePassword?: boolean,
+    sshKey?: string | null,
+    saveSshKey?: boolean,
+    sshKeyPassphrase?: string | null,
+    saveSshKeyPassphrase?: boolean,
 ): Promise<Server> => {
     return invoke<Server>('create_server', {
         workspaceId,
@@ -29,7 +35,11 @@ export const createServer = async (
         port,
         username,
         password: password || null,
-        savePassword: savePassword || false,
+        savePassword: savePassword ?? false,
+        sshKey: sshKey || null,
+        saveSshKey: saveSshKey ?? false,
+        sshKeyPassphrase: sshKeyPassphrase || null,
+        saveSshKeyPassphrase: saveSshKeyPassphrase ?? false,
     });
 };
 
@@ -40,7 +50,11 @@ export const updateServer = async (
     port: number,
     username: string,
     password?: string | null,
-    savePassword?: boolean
+    savePassword?: boolean,
+    sshKey?: string | null,
+    saveSshKey?: boolean,
+    sshKeyPassphrase?: string | null,
+    saveSshKeyPassphrase?: boolean,
 ): Promise<void> => {
     return invoke<void>('update_server', {
         id,
@@ -49,14 +63,14 @@ export const updateServer = async (
         port,
         username,
         password: password || null,
-        savePassword: savePassword || false,
+        savePassword: savePassword ?? false,
+        sshKey: sshKey || null,
+        saveSshKey: saveSshKey ?? false,
+        sshKeyPassphrase: sshKeyPassphrase || null,
+        saveSshKeyPassphrase: saveSshKeyPassphrase ?? false,
     });
 };
 
 export const deleteServer = async (id: string): Promise<void> => {
     return invoke<void>('delete_server', { id });
-};
-
-export const getServerPassword = async (serverId: string): Promise<string | null> => {
-    return invoke<string | null>('get_server_password', { serverId });
 };

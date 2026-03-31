@@ -28,6 +28,10 @@ pub struct ServerRow {
     pub tags: String,
     pub folder_color: Option<String>,
     pub password_enc: Option<String>,
+    /// AES-256-GCM encrypted PEM content of the SSH private key. Never sent to frontend.
+    pub ssh_key_enc: Option<String>,
+    /// AES-256-GCM encrypted passphrase for the SSH private key (optional). Never sent to frontend.
+    pub ssh_key_passphrase_enc: Option<String>,
     pub hlc: String,
     pub deleted: bool,
 }
@@ -44,6 +48,8 @@ impl ServerRow {
             tags: serde_json::from_str(&self.tags).unwrap_or_default(),
             folder_color: self.folder_color,
             has_saved_password: self.password_enc.is_some(),
+            has_saved_ssh_key: self.ssh_key_enc.is_some(),
+            has_saved_ssh_key_passphrase: self.ssh_key_passphrase_enc.is_some(),
             hlc: self.hlc,
             deleted: self.deleted,
         }
@@ -60,8 +66,12 @@ pub struct Server {
     pub username: String,
     pub tags: Vec<String>,
     pub folder_color: Option<String>,
-    /// True if an encrypted password is stored — never expose the actual password to the frontend
+    /// True if an encrypted password is stored — never expose the actual password to the frontend.
     pub has_saved_password: bool,
+    /// True if an encrypted SSH private key is stored — never expose the actual key to the frontend.
+    pub has_saved_ssh_key: bool,
+    /// True if an encrypted passphrase for the SSH key is stored.
+    pub has_saved_ssh_key_passphrase: bool,
     pub hlc: String,
     pub deleted: bool,
 }
