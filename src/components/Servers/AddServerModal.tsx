@@ -38,7 +38,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
     const [username, setUsername] = useState(server?.username ?? DEFAULTS.username);
 
     const [authMethod, setAuthMethod] = useState<AuthMethod>(
-        server?.has_saved_ssh_key ? 'ssh_key' : 'password'
+        server?.auth_method === 'ssh_key' ? 'ssh_key' : 'password'
     );
 
     const [password, setPassword] = useState('');
@@ -80,6 +80,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                     isKeyAuth ? saveSshKey : false,
                     isKeyAuth ? (sshKeyPassphrase || null) : null,
                     isKeyAuth ? saveSshKeyPassphrase : false,
+                    authMethod,
                 );
                 toast.success('Servidor atualizado!');
             } else {
@@ -95,6 +96,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                     isKeyAuth ? saveSshKey : false,
                     isKeyAuth ? (sshKeyPassphrase || null) : null,
                     isKeyAuth ? saveSshKeyPassphrase : false,
+                    authMethod,
                 );
                 toast.success('Servidor criado!');
             }

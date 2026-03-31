@@ -25,6 +25,7 @@ interface Server {
   has_saved_password: boolean;
   has_saved_ssh_key: boolean;
   has_saved_ssh_key_passphrase: boolean;
+  auth_method: 'password' | 'ssh_key';
 }
 
 interface Props {
@@ -64,6 +65,9 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
     );
     const [password, setPassword] = useState("");
     const passwordRef = useRef<HTMLInputElement>(null);
+
+    const [sshKey, setSshKey] = useState("");
+    const [sshKeyPassphrase, setSshKeyPassphrase] = useState("");
 
     // Expose fit() to parent via ref
     useImperativeHandle(ref, () => ({
@@ -222,8 +226,55 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
       }
     };
 
+    const connectWithSshKey = async (key: string, passphrase: string | null) => {
+      const term = xtermRef.current;
+      setConnState("connecting");
+      term?.writeln(
+        `\x1b[1;34m[*] Conectando a ${server.username}@${server.host}:${server.port}...\x1b[0m`,
+      );
+      try {
+        const sessionId = crypto.randomUUID();
+        sessionIdRef.current = sessionId;
+
+        unlistenDataRef.current = await listen<string>(
+          `ssh://data/${sessionId}`,
+          (event) => {
+            const bytes = Uint8Array.from(atob(event.payload), (c) =>
+              c.charCodeAt(0),
+            );
+            xtermRef.current?.write(bytes);
+          },
+        );
+
+        unlistenCloseRef.current = await listen(
+          `ssh://close/${sessionId}`,
+          () => {
+            xtermRef.current?.writeln(
+              "\r\n\x1b[33m[Conexão encerrada pelo servidor]\x1b[0m",
+            );
+            setConnState("error");
+          },
+        );
+
+        const cols = term?.cols ?? 80;
+        const rows = term?.rows ?? 24;
+        await sshConnect(server.id, null, sessionId, cols, rows, key, passphrase || null);
+
+        setConnState("connected");
+        onSessionId?.(sessionId);
+        xtermRef.current?.focus();
+      } catch (err) {
+        term?.writeln(`\x1b[1;31m[✗] Erro: ${String(err)}\x1b[0m`);
+        setConnState("error");
+      }
+    };
+
     const handleConnect = () => {
-      if (password) connectWithPassword(password);
+      if (server.auth_method === 'ssh_key') {
+        if (sshKey) connectWithSshKey(sshKey, sshKeyPassphrase || null);
+      } else {
+        if (password) connectWithPassword(password);
+      }
     };
 
     const handleClose = async () => {
@@ -233,6 +284,8 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
 
     const handleReconnect = async () => {
       setPassword("");
+      setSshKey("");
+      setSshKeyPassphrase("");
       await cleanupSession();
       if (server.has_saved_password || server.has_saved_ssh_key) {
         setConnState("loading");
@@ -240,9 +293,12 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
       } else setConnState("prompt");
     };
 
+    const isSshKeyAuth = server.auth_method === 'ssh_key';
+    const canConnect = isSshKeyAuth ? !!sshKey : !!password;
+
     return (
       <div className="flex flex-col h-full w-full relative" style={{ background: "#000000" }}>
-        {/* Password prompt */}
+        {/* Auth prompt */}
         {connState === "prompt" && isActive && (
           <Modal
             isOpen={true}
@@ -253,38 +309,99 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
             <p className="text-xs font-mono mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
               {server.username}@{server.host}:{server.port}
             </p>
-            <div className="mb-4">
-              <label className="block text-[11px] font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.45)" }}>
-                Senha
-              </label>
-              <input
-                ref={passwordRef}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleConnect();
-                }}
-                placeholder="••••••••"
-                className="w-full rounded-xl px-3 py-2.5 text-sm font-mono transition-all focus:outline-none"
-                style={{
-                  background: "rgba(255,255,255,0.07)",
-                  border: "0.5px solid rgba(255,255,255,0.1)",
-                  color: "rgba(255,255,255,0.9)",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.border = "0.5px solid #0a84ff";
-                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
-            </div>
+
+            {isSshKeyAuth ? (
+              /* ── SSH Key fields ─────────────────────────────── */
+              <>
+                <div className="mb-4">
+                  <label className="block text-[11px] font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.45)" }}>
+                    Chave privada (PEM)
+                  </label>
+                  <textarea
+                    value={sshKey}
+                    onChange={(e) => setSshKey(e.target.value)}
+                    placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+                    rows={4}
+                    className="w-full rounded-xl px-3 py-2.5 text-xs font-mono transition-all focus:outline-none resize-none leading-relaxed"
+                    style={{
+                      background: "rgba(255,255,255,0.07)",
+                      border: "0.5px solid rgba(255,255,255,0.1)",
+                      color: "rgba(255,255,255,0.9)",
+                    }}
+                    spellCheck={false}
+                    autoComplete="off"
+                    onFocus={(e) => {
+                      e.currentTarget.style.border = "0.5px solid #0a84ff";
+                      e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)";
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-[11px] font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.45)" }}>
+                    Passphrase da chave (opcional)
+                  </label>
+                  <input
+                    type="password"
+                    value={sshKeyPassphrase}
+                    onChange={(e) => setSshKeyPassphrase(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleConnect(); }}
+                    placeholder="Deixe em branco se a chave não tiver passphrase"
+                    className="w-full rounded-xl px-3 py-2.5 text-sm font-mono transition-all focus:outline-none"
+                    style={{
+                      background: "rgba(255,255,255,0.07)",
+                      border: "0.5px solid rgba(255,255,255,0.1)",
+                      color: "rgba(255,255,255,0.9)",
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.border = "0.5px solid #0a84ff";
+                      e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)";
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  />
+                </div>
+              </>
+            ) : (
+              /* ── Password field ──────────────────────────────── */
+              <div className="mb-4">
+                <label className="block text-[11px] font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.45)" }}>
+                  Senha
+                </label>
+                <input
+                  ref={passwordRef}
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleConnect();
+                  }}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl px-3 py-2.5 text-sm font-mono transition-all focus:outline-none"
+                  style={{
+                    background: "rgba(255,255,255,0.07)",
+                    border: "0.5px solid rgba(255,255,255,0.1)",
+                    color: "rgba(255,255,255,0.9)",
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.border = "0.5px solid #0a84ff";
+                    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                />
+              </div>
+            )}
+
             <p className="text-xs mb-5" style={{ color: "rgba(255,255,255,0.25)" }}>
-              Edite o servidor para salvar uma senha ou chave SSH e conectar sem
-              digitar sempre.
+              Edite o servidor para salvar {isSshKeyAuth ? "a chave SSH" : "uma senha ou chave SSH"} e conectar sem digitar sempre.
             </p>
             <div className="flex gap-3">
               <button
@@ -296,7 +413,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
               </button>
               <button
                 onClick={handleConnect}
-                disabled={!password}
+                disabled={!canConnect}
                 className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all active:scale-[0.98] disabled:opacity-40"
                 style={{ background: "#0a84ff", color: "#ffffff" }}
               >

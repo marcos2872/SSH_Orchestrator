@@ -9,6 +9,8 @@ export interface Server {
   has_saved_password: boolean;
   has_saved_ssh_key: boolean;
   has_saved_ssh_key_passphrase: boolean;
+  /** Preferred authentication method configured at server creation/edit time. */
+  auth_method: 'password' | 'ssh_key';
 }
 
 export type SplitMode = "none" | "horizontal" | "vertical";

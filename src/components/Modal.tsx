@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -39,7 +40,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
         }
     };
 
-    return (
+    return createPortal(
         <div
             ref={overlayRef}
             onClick={handleOverlayClick}
@@ -83,7 +84,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
                     {children}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

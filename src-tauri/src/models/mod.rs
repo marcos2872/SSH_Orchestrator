@@ -32,6 +32,8 @@ pub struct ServerRow {
     pub ssh_key_enc: Option<String>,
     /// AES-256-GCM encrypted passphrase for the SSH private key (optional). Never sent to frontend.
     pub ssh_key_passphrase_enc: Option<String>,
+    /// Preferred authentication method: "password" or "ssh_key".
+    pub auth_method: String,
     pub hlc: String,
     pub deleted: bool,
 }
@@ -50,6 +52,7 @@ impl ServerRow {
             has_saved_password: self.password_enc.is_some(),
             has_saved_ssh_key: self.ssh_key_enc.is_some(),
             has_saved_ssh_key_passphrase: self.ssh_key_passphrase_enc.is_some(),
+            auth_method: self.auth_method,
             hlc: self.hlc,
             deleted: self.deleted,
         }
@@ -72,6 +75,8 @@ pub struct Server {
     pub has_saved_ssh_key: bool,
     /// True if an encrypted passphrase for the SSH key is stored.
     pub has_saved_ssh_key_passphrase: bool,
+    /// Preferred authentication method: "password" or "ssh_key".
+    pub auth_method: String,
     pub hlc: String,
     pub deleted: bool,
 }

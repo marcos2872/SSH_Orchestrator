@@ -25,6 +25,7 @@ pub async fn get_servers(
 /// - `password` + `save_password`: SSH password auth, encrypted with vault DEK.
 /// - `ssh_key` + `save_ssh_key`: PEM private key, encrypted with vault DEK.
 /// - `ssh_key_passphrase` + `save_ssh_key_passphrase`: optional key passphrase.
+/// - `auth_method`: "password" or "ssh_key" — controls which prompt is shown at connect-time.
 ///
 /// Raw credential values are NEVER stored — only their AES-256-GCM encrypted forms.
 #[tauri::command]
@@ -42,6 +43,7 @@ pub async fn create_server(
     save_ssh_key: bool,
     ssh_key_passphrase: Option<String>,
     save_ssh_key_passphrase: bool,
+    auth_method: String,
 ) -> Result<crate::models::Server, String> {
     // ── Encrypt password ───────────────────────────────────────────────────
     let password_enc: Option<String> = if save_password {
@@ -93,14 +95,15 @@ pub async fn create_server(
         has_saved_password: password_enc.is_some(),
         has_saved_ssh_key: ssh_key_enc.is_some(),
         has_saved_ssh_key_passphrase: ssh_key_passphrase_enc.is_some(),
+        auth_method,
         hlc: hlc.to_string_repr(),
         deleted: false,
     };
 
     sqlx::query(
         "INSERT INTO servers \
-         (id, workspace_id, name, host, port, username, tags, password_enc, ssh_key_enc, ssh_key_passphrase_enc, hlc, deleted) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+         (id, workspace_id, name, host, port, username, tags, password_enc, ssh_key_enc, ssh_key_passphrase_enc, auth_method, hlc, deleted) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
     )
     .bind(&server.id)
     .bind(&server.workspace_id)
@@ -112,6 +115,7 @@ pub async fn create_server(
     .bind(&password_enc)
     .bind(&ssh_key_enc)
     .bind(&ssh_key_passphrase_enc)
+    .bind(&server.auth_method)
     .bind(&server.hlc)
     .execute(&state.db.pool)
     .await
@@ -140,6 +144,7 @@ pub async fn update_server(
     save_ssh_key: bool,
     ssh_key_passphrase: Option<String>,
     save_ssh_key_passphrase: bool,
+    auth_method: String,
 ) -> Result<(), String> {
     let srv_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
 
@@ -203,7 +208,7 @@ pub async fn update_server(
     sqlx::query(
         "UPDATE servers \
          SET name = ?, host = ?, port = ?, username = ?, password_enc = ?, \
-             ssh_key_enc = ?, ssh_key_passphrase_enc = ?, hlc = ? \
+             ssh_key_enc = ?, ssh_key_passphrase_enc = ?, auth_method = ?, hlc = ? \
          WHERE id = ?",
     )
     .bind(&name)
@@ -213,6 +218,7 @@ pub async fn update_server(
     .bind(&password_enc)
     .bind(&ssh_key_enc)
     .bind(&ssh_key_passphrase_enc)
+    .bind(&auth_method)
     .bind(&hlc)
     .bind(srv_id)
     .execute(&state.db.pool)
