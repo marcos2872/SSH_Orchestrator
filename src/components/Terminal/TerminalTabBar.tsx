@@ -16,8 +16,14 @@ const TerminalTabBar: React.FC<Props> = ({
 }) => {
   return (
     <div
-      className="flex items-stretch overflow-x-auto scrollbar-none bg-slate-950 border-b border-slate-800 shrink-0"
-      style={{ height: "36px" }}
+      className="flex items-stretch overflow-x-auto scrollbar-none shrink-0 border-b"
+      style={{
+        height: "36px",
+        background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        borderColor: "rgba(255,255,255,0.08)",
+      }}
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
@@ -31,27 +37,37 @@ const TerminalTabBar: React.FC<Props> = ({
             ? `${tab.server.username}@${tab.server.host}`
             : "Unknown";
 
+        // Dot color: Apple green for local, Apple system blue for SSH/SFTP
         const dotColor = isActive
           ? isLocal
-            ? "bg-emerald-400"
-            : "bg-green-400"
-          : "bg-slate-600";
+            ? "#32d74b"
+            : isSftp
+              ? "#64d2ff"
+              : "#0a84ff"
+          : "rgba(255,255,255,0.2)";
 
         return (
           <button
             key={tab.id}
             onClick={() => onSelect(tab.id)}
-            className={`
-              group flex items-center gap-2 px-3 h-full text-xs font-mono shrink-0
-              border-r border-slate-800 border-t-2 transition-colors select-none
-              ${
-                isActive
-                  ? `bg-[#0f172a] text-slate-100 ${isLocal ? "border-t-emerald-500" : "border-t-sky-500"}`
-                  : "bg-slate-950 text-slate-400 hover:bg-slate-900 hover:text-slate-200 border-t-transparent"
-              }
-            `}
+            className="group flex items-center gap-2 px-3 h-full text-xs font-mono shrink-0 transition-colors select-none"
+            style={{
+              borderRight: "1px solid rgba(255,255,255,0.06)",
+              borderBottom: isActive
+                ? `2px solid ${isLocal ? "#32d74b" : isSftp ? "#64d2ff" : "#0a84ff"}`
+                : "2px solid transparent",
+              background: isActive
+                ? "rgba(255,255,255,0.07)"
+                : "transparent",
+              color: isActive
+                ? "rgba(255,255,255,0.9)"
+                : "rgba(255,255,255,0.4)",
+            }}
           >
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: dotColor }}
+            />
             {icon && (
               <span className="text-[10px] leading-none shrink-0">{icon}</span>
             )}
@@ -63,7 +79,10 @@ const TerminalTabBar: React.FC<Props> = ({
                 e.stopPropagation();
                 onClose(tab.id);
               }}
-              className="ml-1 w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-white"
+              className="ml-1 w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{
+                color: "rgba(255,255,255,0.5)",
+              }}
               title="Fechar aba"
             >
               ✕

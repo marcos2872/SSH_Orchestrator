@@ -35,14 +35,14 @@ interface Props {
 }
 
 const COLORS = [
-  "#3b82f6",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#ec4899",
-  "#06b6d4",
-  "#84cc16",
+  "#0a84ff",
+  "#32d74b",
+  "#ff9f0a",
+  "#ff453a",
+  "#bf5af2",
+  "#ff375f",
+  "#64d2ff",
+  "#30d158",
 ];
 
 const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
@@ -110,9 +110,8 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
 
   const handleCreateWorkspace = async () => {
     try {
-      await createWorkspace("Novo Workspace", "#3b82f6");
+      await createWorkspace("Novo Workspace", "#0a84ff");
       loadWorkspaces();
-      // Auto-expand when creating
       setCollapsed(false);
     } catch (err) {
       toast.error(`Erro ao criar workspace: ${err}`);
@@ -186,29 +185,39 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
     <>
       <div
         className={`
-                    bg-secondary h-full border-r border-slate-700 flex flex-col
-                    transition-all duration-300 ease-in-out overflow-hidden shrink-0
-                    ${collapsed ? "w-14" : "w-64"}
-                `}
+          h-full flex flex-col
+          transition-all duration-300 ease-in-out overflow-hidden shrink-0
+          ${collapsed ? "w-14" : "w-64"}
+        `}
+        style={{
+          background: "rgba(28, 28, 30, 0.72)",
+          backdropFilter: "blur(20px) saturate(180%)",
+          WebkitBackdropFilter: "blur(20px) saturate(180%)",
+          borderRight: "0.5px solid rgba(255, 255, 255, 0.08)",
+        }}
       >
         {/* ── Header ── */}
         <div
-          className={`flex items-center border-b border-slate-700/50 shrink-0 ${collapsed ? "justify-center p-3" : "justify-between p-4"}`}
+          className={`flex items-center shrink-0 ${collapsed ? "justify-center p-3" : "justify-between p-4"}`}
+          style={{ borderBottom: "0.5px solid rgba(255,255,255,0.07)" }}
         >
           {!collapsed && (
-            <h1 className="text-xl font-bold flex items-center gap-2 whitespace-nowrap overflow-hidden">
-              <Activity className="text-primary w-6 h-6 shrink-0" />
+            <h1 className="text-[15px] font-semibold flex items-center gap-2 whitespace-nowrap overflow-hidden text-white/90">
+              <Activity className="text-primary w-5 h-5 shrink-0" />
               SSH Config
             </h1>
           )}
-          {collapsed && <Activity className="text-primary w-6 h-6 shrink-0" />}
+          {collapsed && <Activity className="text-primary w-5 h-5 shrink-0" />}
           {!collapsed && (
             <button
               onClick={() => setCollapsed(true)}
               title="Colapsar sidebar"
-              className="p-1 hover:bg-slate-700 rounded-md transition-colors"
+              className="p-1 rounded-md transition-colors"
+              style={{ color: "rgba(255,255,255,0.35)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <ChevronLeft className="w-5 h-5 text-slate-400" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -220,9 +229,12 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
             <button
               onClick={() => setCollapsed(false)}
               title="Expandir sidebar"
-              className="p-2 hover:bg-slate-700 rounded-md transition-colors mb-1"
+              className="p-2 rounded-lg transition-colors mb-1"
+              style={{ color: "rgba(255,255,255,0.4)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <ChevronRight className="w-4 h-4 text-slate-400" />
+              <ChevronRight className="w-4 h-4" />
             </button>
 
             {/* Workspace dots */}
@@ -235,16 +247,16 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                   setCollapsed(false);
                 }}
                 className={`
-                                    w-8 h-8 rounded-lg flex items-center justify-center transition-all
-                                    ${selectedId === ws.id ? "ring-2 ring-white/30 scale-110" : "hover:scale-110"}
-                                `}
+                  w-8 h-8 rounded-xl flex items-center justify-center transition-all
+                  ${selectedId === ws.id ? "ring-2 ring-white/25 scale-110" : "hover:scale-110"}
+                `}
                 style={{
-                  backgroundColor: ws.color + "33",
-                  border: `2px solid ${ws.color}`,
+                  backgroundColor: ws.color + "25",
+                  border: `1.5px solid ${ws.color}60`,
                 }}
               >
                 <span
-                  className="text-[10px] font-bold uppercase"
+                  className="text-[10px] font-bold"
                   style={{ color: ws.color }}
                 >
                   {ws.name.charAt(0)}
@@ -256,9 +268,12 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
             <button
               onClick={handleCreateWorkspace}
               title="Novo Workspace"
-              className="p-2 hover:bg-slate-700 rounded-md transition-colors mt-auto mb-3"
+              className="p-2 rounded-lg transition-colors mt-auto mb-3"
+              style={{ color: "rgba(255,255,255,0.3)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <Plus className="w-4 h-4 text-slate-500" />
+              <Plus className="w-4 h-4" />
             </button>
           </div>
         )}
@@ -266,17 +281,20 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
         {/* ── Expanded: full list ── */}
         {!collapsed && (
           <>
-            <nav className="flex-1 overflow-y-auto space-y-1 p-4">
-              <div className="flex items-center justify-between mb-4 px-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <nav className="flex-1 overflow-y-auto space-y-0.5 p-3">
+              <div className="flex items-center justify-between mb-3 px-2">
+                <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
                   Workspaces
                 </span>
                 <button
                   onClick={handleCreateWorkspace}
                   title="Novo Workspace"
-                  className="p-0.5 hover:bg-slate-700 rounded transition-colors"
+                  className="p-0.5 rounded transition-colors"
+                  style={{ color: "rgba(255,255,255,0.3)" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  <Plus className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300" />
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
 
@@ -292,14 +310,18 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                           if (e.key === "Enter") handleSaveEdit();
                           if (e.key === "Escape") setEditingId(null);
                         }}
-                        className="w-full bg-slate-800 border border-primary/50 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full rounded-lg px-2.5 py-1.5 text-sm focus:outline-none text-white"
+                        style={{
+                          background: "rgba(255,255,255,0.08)",
+                          border: "0.5px solid rgba(10,132,255,0.6)",
+                        }}
                       />
                       <div className="flex gap-1 flex-wrap">
                         {COLORS.map((c) => (
                           <button
                             key={c}
                             onClick={() => setEditColor(c)}
-                            className={`w-5 h-5 rounded-full transition-transform ${editColor === c ? "scale-125 ring-2 ring-white" : ""}`}
+                            className={`w-5 h-5 rounded-full transition-transform ${editColor === c ? "scale-125 ring-2 ring-white/60" : ""}`}
                             style={{ backgroundColor: c }}
                           />
                         ))}
@@ -307,13 +329,19 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                       <div className="flex gap-2">
                         <button
                           onClick={handleSaveEdit}
-                          className="flex-1 flex items-center justify-center gap-1 py-1 text-xs bg-primary hover:bg-blue-600 rounded transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold text-white rounded-lg transition-colors"
+                          style={{ background: "#0a84ff" }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "#409cff")}
+                          onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
                         >
                           <Check className="w-3 h-3" /> Salvar
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="flex-1 flex items-center justify-center gap-1 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg transition-colors"
+                          style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
+                          onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                         >
                           <X className="w-3 h-3" /> Cancelar
                         </button>
@@ -325,13 +353,23 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                         setMenuOpenId(null);
                         onSelectWorkspace(ws);
                       }}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${selectedId === ws.id ? "bg-primary/20 text-white" : "hover:bg-slate-800"}`}
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all"
+                      style={{
+                        background: selectedId === ws.id ? "rgba(255,255,255,0.1)" : "transparent",
+                        color: selectedId === ws.id ? "white" : "rgba(255,255,255,0.7)",
+                      }}
+                      onMouseEnter={e => {
+                        if (selectedId !== ws.id) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.06)";
+                      }}
+                      onMouseLeave={e => {
+                        if (selectedId !== ws.id) (e.currentTarget as HTMLDivElement).style.background = "transparent";
+                      }}
                     >
                       <div
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: ws.color }}
                       />
-                      <span className="flex-1 text-sm font-medium truncate">
+                      <span className="flex-1 text-[13px] font-medium truncate">
                         {ws.name}
                       </span>
                       <button
@@ -339,27 +377,40 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                           e.stopPropagation();
                           setMenuOpenId(menuOpenId === ws.id ? null : ws.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-700 transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded-md transition-all"
+                        style={{ color: "rgba(255,255,255,0.5)" }}
                       >
-                        <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                        <MoreHorizontal className="w-4 h-4" />
                       </button>
                     </div>
                   )}
 
                   {menuOpenId === ws.id && (
                     <div
-                      className="absolute right-0 top-8 z-50 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 text-sm"
+                      className="absolute right-0 top-8 z-50 w-40 rounded-xl shadow-2xl py-1 text-sm overflow-hidden"
+                      style={{
+                        background: "rgba(44,44,46,0.92)",
+                        backdropFilter: "blur(40px) saturate(180%)",
+                        WebkitBackdropFilter: "blur(40px) saturate(180%)",
+                        border: "0.5px solid rgba(255,255,255,0.12)",
+                        boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
+                      }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
                         onClick={(e) => handleStartEdit(ws, e)}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-700 text-left transition-colors"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors text-white/80"
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                       >
-                        <Pencil className="w-4 h-4 text-slate-400" /> Renomear
+                        <Pencil className="w-4 h-4 opacity-60" /> Renomear
                       </button>
                       <button
                         onClick={() => setConfirmDeleteId(ws.id)}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-500/20 text-red-400 text-left transition-colors"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors"
+                        style={{ color: "#ff453a" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,69,58,0.1)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                       >
                         <Trash2 className="w-4 h-4" /> Excluir
                       </button>
@@ -370,22 +421,31 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
 
               {workspaces.length === 0 && (
                 <div className="px-3 py-8 text-center">
-                  <Folder className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
-                  <p className="text-xs text-slate-500">
-                    Nenhum workspace encontrado
+                  <Folder className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: "rgba(255,255,255,0.5)" }} />
+                  <p className="text-xs" style={{ color: "rgba(235,235,245,0.35)" }}>
+                    Nenhum workspace
                   </p>
                 </div>
               )}
             </nav>
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-700">
+            <div className="p-3" style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}>
               <div
                 onClick={() => setShowSettings(true)}
-                className="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-white cursor-pointer rounded-lg hover:bg-slate-800 transition-colors"
+                className="flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors"
+                style={{ color: "rgba(255,255,255,0.45)" }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.06)";
+                  (e.currentTarget as HTMLDivElement).style.color = "rgba(255,255,255,0.85)";
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = "transparent";
+                  (e.currentTarget as HTMLDivElement).style.color = "rgba(255,255,255,0.45)";
+                }}
               >
-                <Server className="w-5 h-5 shrink-0" />
-                <span className="text-sm">Configuração</span>
+                <Server className="w-4 h-4 shrink-0" />
+                <span className="text-[13px] font-medium">Configuração</span>
               </div>
             </div>
           </>
@@ -399,37 +459,41 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
         title="Configurações"
         width="w-[420px]"
       >
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* ── Section: GitHub Sync ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Github className="w-4 h-4 text-slate-400" />
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <Github className="w-4 h-4" style={{ color: "rgba(255,255,255,0.4)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
                 GitHub Sync
               </span>
             </div>
 
             {authLoading ? (
-              <div className="flex items-center justify-center py-6 text-slate-500">
+              <div className="flex items-center justify-center py-6" style={{ color: "rgba(255,255,255,0.3)" }}>
                 <Loader2 className="w-5 h-5 animate-spin" />
               </div>
             ) : user ? (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+              <div
+                className="rounded-2xl p-4"
+                style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+              >
                 <div className="flex items-center gap-3 mb-4">
                   <img
                     src={user.avatar_url}
                     alt={user.login}
-                    className="w-10 h-10 rounded-full border-2 border-slate-600"
+                    className="w-10 h-10 rounded-full"
+                    style={{ border: "0.5px solid rgba(255,255,255,0.2)" }}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-200 truncate">
+                    <p className="text-sm font-semibold text-white truncate">
                       {user.name || user.login}
                     </p>
-                    <p className="text-xs text-slate-500 font-mono truncate">
+                    <p className="text-xs font-mono truncate" style={{ color: "rgba(235,235,245,0.4)" }}>
                       @{user.login}
                     </p>
                     {user.email && (
-                      <p className="text-xs text-slate-500 truncate">
+                      <p className="text-xs truncate" style={{ color: "rgba(235,235,245,0.35)" }}>
                         {user.email}
                       </p>
                     )}
@@ -439,19 +503,31 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Ver perfil no GitHub"
-                    className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-500 hover:text-white shrink-0"
+                    className="p-1.5 rounded-lg transition-colors shrink-0"
+                    style={{ color: "rgba(255,255,255,0.4)" }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.08)";
+                      (e.currentTarget as HTMLAnchorElement).style.color = "white";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+                      (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.4)";
+                    }}
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-emerald-400 mb-4">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <div className="flex items-center gap-2 text-xs mb-4" style={{ color: "#32d74b" }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#32d74b" }} />
                   Sync ativo — workspaces sincronizados automaticamente
                 </div>
                 <button
                   onClick={handleGitHubLogout}
                   disabled={githubActionLoading}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
+                  style={{ color: "#ff453a", background: "rgba(255,69,58,0.1)", border: "0.5px solid rgba(255,69,58,0.25)" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,69,58,0.18)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,69,58,0.1)")}
                 >
                   {githubActionLoading ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -462,15 +538,21 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                 </button>
               </div>
             ) : (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-                <p className="text-sm text-slate-400 mb-4">
+              <div
+                className="rounded-2xl p-4"
+                style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+              >
+                <p className="text-sm mb-4" style={{ color: "rgba(235,235,245,0.55)" }}>
                   Conecte ao GitHub para sincronizar seus workspaces e
                   servidores entre dispositivos de forma segura.
                 </p>
                 <button
                   onClick={handleGitHubLogin}
                   disabled={githubActionLoading}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-lg transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 text-white"
+                  style={{ background: "#0a84ff" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "#409cff")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
                 >
                   {githubActionLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -486,15 +568,18 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
           {/* ── Section: Vault ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Shield className="w-4 h-4 text-slate-400" />
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <Shield className="w-4 h-4" style={{ color: "rgba(255,255,255,0.4)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
                 Vault
               </span>
             </div>
 
-            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+            <div
+              className="rounded-2xl p-4"
+              style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+            >
               {vaultLoading ? (
-                <div className="flex items-center justify-center py-4 text-slate-500">
+                <div className="flex items-center justify-center py-4" style={{ color: "rgba(255,255,255,0.3)" }}>
                   <Loader2 className="w-5 h-5 animate-spin" />
                 </div>
               ) : (
@@ -504,14 +589,14 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                       {vaultConfigured ? (vaultLocked ? "🔒" : "🔓") : "⚠️"}
                     </span>
                     <div>
-                      <p className="text-sm font-semibold text-slate-200">
+                      <p className="text-sm font-semibold text-white">
                         {vaultConfigured
                           ? vaultLocked
                             ? "Vault bloqueado"
                             : "Vault desbloqueado"
                           : "Vault não configurado"}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs" style={{ color: "rgba(235,235,245,0.4)" }}>
                         {vaultConfigured
                           ? vaultLocked
                             ? "O vault está protegido. Reinicie o app para desbloquear."
@@ -527,17 +612,20 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
 
           {/* ── Section: About ── */}
           <div>
-            <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
+            <div
+              className="rounded-2xl p-4"
+              style={{ background: "rgba(255,255,255,0.04)", border: "0.5px solid rgba(255,255,255,0.08)" }}
+            >
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
+                <div className="p-2 rounded-xl" style={{ background: "rgba(10,132,255,0.15)" }}>
                   <Activity className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-300">
+                  <p className="text-sm font-semibold text-white/80">
                     SSH Orchestrator
                   </p>
-                  <p className="text-xs text-slate-600">
-                    v0.1.0 • Tauri + React + Rust
+                  <p className="text-xs" style={{ color: "rgba(235,235,245,0.3)" }}>
+                    v0.1.0 · Tauri + React + Rust
                   </p>
                 </div>
               </div>
@@ -547,7 +635,10 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
           {/* ── Close button ── */}
           <button
             onClick={() => setShowSettings(false)}
-            className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-lg transition-colors"
+            className="w-full py-2.5 text-sm font-semibold rounded-xl transition-colors text-white/80"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
           >
             Fechar
           </button>
@@ -564,7 +655,7 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
         title="Excluir workspace?"
         width="w-96"
       >
-        <p className="text-sm text-slate-400 mb-6">
+        <p className="text-sm mb-6" style={{ color: "rgba(235,235,245,0.55)" }}>
           Esta ação irá excluir o workspace e{" "}
           <strong className="text-white">todos os servidores</strong>{" "}
           associados. Não pode ser desfeita.
@@ -575,7 +666,10 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
               setConfirmDeleteId(null);
               setMenuOpenId(null);
             }}
-            className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors text-white/70"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
           >
             Cancelar
           </button>
@@ -583,7 +677,10 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
             onClick={() =>
               confirmDeleteId && handleDeleteWorkspace(confirmDeleteId)
             }
-            className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold rounded-lg transition-colors text-white"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors text-white"
+            style={{ background: "#ff453a" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "#ff6961")}
+            onMouseLeave={e => (e.currentTarget.style.background = "#ff453a")}
           >
             Excluir
           </button>

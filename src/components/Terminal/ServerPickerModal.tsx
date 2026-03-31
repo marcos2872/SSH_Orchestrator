@@ -31,17 +31,17 @@ const ServerPickerModal: React.FC<Props> = ({ isOpen, workspaceId, onSelect, onC
         >
             <div className="max-h-72 overflow-y-auto -mx-8 -mb-8">
                 {loading && (
-                    <div className="flex items-center justify-center py-10 text-slate-500 text-sm animate-pulse">
+                    <div className="flex items-center justify-center py-10 text-xs animate-pulse" style={{ color: "rgba(255,255,255,0.35)" }}>
                         Carregando...
                     </div>
                 )}
                 {!loading && !workspaceId && (
-                    <div className="px-4 py-8 text-center text-slate-500 text-sm">
+                    <div className="px-4 py-8 text-center text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
                         Selecione um workspace primeiro
                     </div>
                 )}
                 {!loading && workspaceId && servers.length === 0 && (
-                    <div className="px-4 py-8 text-center text-slate-500 text-sm">
+                    <div className="px-4 py-8 text-center text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
                         Nenhum servidor neste workspace
                     </div>
                 )}
@@ -49,14 +49,25 @@ const ServerPickerModal: React.FC<Props> = ({ isOpen, workspaceId, onSelect, onC
                     <button
                         key={srv.id}
                         onClick={() => onSelect(srv)}
-                        className="w-full flex items-center gap-3 px-6 py-3 hover:bg-slate-800 transition-colors text-left group last:rounded-b-2xl"
+                        className="w-full flex items-center gap-3 px-6 py-3 text-left group last:rounded-b-[20px] transition-colors"
+                        style={{ color: "rgba(255,255,255,0.85)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
                     >
-                        <span className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-slate-700 flex items-center justify-center shrink-0 text-base">🖥</span>
+                        <span
+                            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-base"
+                            style={{ background: "rgba(255,255,255,0.07)" }}
+                        >🖥</span>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-200 truncate">{srv.name}</p>
-                            <p className="text-xs text-slate-500 font-mono truncate">{srv.username}@{srv.host}:{srv.port}</p>
+                            <p className="text-sm font-medium truncate">{srv.name}</p>
+                            <p className="text-xs font-mono truncate" style={{ color: "rgba(255,255,255,0.35)" }}>
+                                {srv.username}@{srv.host}:{srv.port}
+                            </p>
                         </div>
-                        <span className="text-sky-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Conectar →</span>
+                        <span
+                            className="text-xs opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            style={{ color: "#0a84ff" }}
+                        >Conectar →</span>
                     </button>
                 ))}
             </div>

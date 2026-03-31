@@ -31,7 +31,6 @@ type VaultFlowState =
   | "unlock"
   | "unlock_synced";
 
-// --- Password Strength Helper ---
 type StrengthLevel = "weak" | "fair" | "good" | "strong";
 
 interface PasswordStrength {
@@ -44,13 +43,7 @@ interface PasswordStrength {
 
 function evaluatePasswordStrength(password: string): PasswordStrength {
   if (password.length === 0) {
-    return {
-      level: "weak",
-      label: "",
-      color: "text-slate-500",
-      barColor: "bg-slate-700",
-      percent: 0,
-    };
+    return { level: "weak", label: "", color: "", barColor: "rgba(255,255,255,0.1)", percent: 0 };
   }
   let score = 0;
   if (password.length >= 8) score++;
@@ -60,51 +53,20 @@ function evaluatePasswordStrength(password: string): PasswordStrength {
   if (/[^a-zA-Z0-9]/.test(password)) score++;
 
   if (password.length < 8) {
-    return {
-      level: "weak",
-      label: "Muito curta",
-      color: "text-red-400",
-      barColor: "bg-red-500",
-      percent: 15,
-    };
+    return { level: "weak", label: "Muito curta", color: "#ff453a", barColor: "#ff453a", percent: 15 };
   }
   if (score <= 2) {
-    return {
-      level: "weak",
-      label: "Fraca",
-      color: "text-red-400",
-      barColor: "bg-red-500",
-      percent: 25,
-    };
+    return { level: "weak", label: "Fraca", color: "#ff453a", barColor: "#ff453a", percent: 25 };
   }
   if (score === 3) {
-    return {
-      level: "fair",
-      label: "Razoável",
-      color: "text-amber-400",
-      barColor: "bg-amber-500",
-      percent: 50,
-    };
+    return { level: "fair", label: "Razoável", color: "#ffd60a", barColor: "#ffd60a", percent: 50 };
   }
   if (score === 4) {
-    return {
-      level: "good",
-      label: "Boa",
-      color: "text-blue-400",
-      barColor: "bg-blue-500",
-      percent: 75,
-    };
+    return { level: "good", label: "Boa", color: "#0a84ff", barColor: "#0a84ff", percent: 75 };
   }
-  return {
-    level: "strong",
-    label: "Forte",
-    color: "text-green-400",
-    barColor: "bg-green-500",
-    percent: 100,
-  };
+  return { level: "strong", label: "Forte", color: "#32d74b", barColor: "#32d74b", percent: 100 };
 }
 
-// --- Relative time formatter ---
 function formatRelativeTime(isoString: string): string {
   try {
     const date = new Date(isoString);
@@ -132,7 +94,6 @@ function formatRelativeTime(isoString: string): string {
   }
 }
 
-// --- Inline Password Input Component ---
 interface PasswordInputProps {
   value: string;
   onChange: (val: string) => void;
@@ -142,7 +103,7 @@ interface PasswordInputProps {
   error?: string;
   shake?: boolean;
   onCapsLock?: (active: boolean) => void;
-  extraClass?: string;
+  accentBlue?: boolean;
 }
 
 const PasswordInput: React.FC<PasswordInputProps> = ({
@@ -154,57 +115,74 @@ const PasswordInput: React.FC<PasswordInputProps> = ({
   error,
   shake,
   onCapsLock,
-  extraClass,
+  accentBlue,
 }) => {
   const [visible, setVisible] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   const handleKeyEvent = (e: React.KeyboardEvent) => {
-    if (onCapsLock) {
-      onCapsLock(e.getModifierState("CapsLock"));
-    }
+    if (onCapsLock) onCapsLock(e.getModifierState("CapsLock"));
   };
+
+  const borderColor = error
+    ? "rgba(255,69,58,0.7)"
+    : focused
+    ? accentBlue
+      ? "rgba(10,132,255,0.8)"
+      : "rgba(10,132,255,0.8)"
+    : "rgba(255,255,255,0.1)";
 
   return (
     <div>
-      <label className="block text-xs text-slate-400 font-medium mb-1">
+      <label
+        className="block text-[11px] font-medium mb-1.5"
+        style={{ color: "rgba(235,235,245,0.45)" }}
+      >
         {label}
       </label>
-      <div className={`relative ${shake ? "vault-shake" : ""}`}>
-        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input
-          type={visible ? "text" : "password"}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyEvent}
-          onKeyUp={handleKeyEvent}
-          className={`
-            w-full bg-slate-950 border rounded-md py-2 pl-10 pr-10
-            focus:outline-none focus:ring-1 text-sm transition-all
-            ${
-              error
-                ? "border-red-500/70 focus:border-red-500 focus:ring-red-500/50"
-                : "border-slate-800 focus:border-primary/50 focus:ring-primary/50"
-            }
-            ${extraClass || ""}
-          `}
-          placeholder={placeholder}
-          autoFocus={autoFocus}
-        />
-        <button
-          type="button"
-          onClick={() => setVisible(!visible)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-          tabIndex={-1}
+      <div className={shake ? "vault-shake" : ""}>
+        <div
+          className="relative rounded-xl overflow-hidden"
+          style={{
+            background: "rgba(255,255,255,0.06)",
+            border: `0.5px solid ${borderColor}`,
+            transition: "border-color 0.15s",
+          }}
         >
-          {visible ? (
-            <EyeOff className="w-4 h-4" />
-          ) : (
-            <Eye className="w-4 h-4" />
-          )}
-        </button>
+          <KeyRound
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+            style={{ color: "rgba(255,255,255,0.3)" }}
+          />
+          <input
+            type={visible ? "text" : "password"}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyEvent}
+            onKeyUp={handleKeyEvent}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            className="w-full bg-transparent py-2.5 pl-10 pr-10 text-sm text-white focus:outline-none placeholder:text-white/20"
+            placeholder={placeholder}
+            autoFocus={autoFocus}
+          />
+          <button
+            type="button"
+            onClick={() => setVisible(!visible)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+            style={{ color: "rgba(255,255,255,0.3)" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.7)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
+            tabIndex={-1}
+          >
+            {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
       {error && (
-        <p className="mt-1.5 text-xs text-red-400 flex items-center gap-1">
+        <p
+          className="mt-1.5 text-xs flex items-center gap-1"
+          style={{ color: "#ff453a" }}
+        >
           <AlertTriangle className="w-3 h-3 shrink-0" />
           {error}
         </p>
@@ -213,7 +191,6 @@ const PasswordInput: React.FC<PasswordInputProps> = ({
   );
 };
 
-// --- Animated Page Wrapper ---
 interface AnimatedPageProps {
   children: React.ReactNode;
   flowKey: string;
@@ -223,13 +200,8 @@ const AnimatedPage: React.FC<AnimatedPageProps> = ({ children, flowKey }) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Force a reflow then animate in
-    const raf = requestAnimationFrame(() => {
-      setVisible(true);
-    });
-    return () => {
-      cancelAnimationFrame(raf);
-    };
+    const raf = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(raf);
   }, [flowKey]);
 
   return (
@@ -243,46 +215,83 @@ const AnimatedPage: React.FC<AnimatedPageProps> = ({ children, flowKey }) => {
   );
 };
 
-// --- Enter Hint Component ---
 const EnterHint: React.FC<{ visible: boolean }> = ({ visible }) => {
   if (!visible) return null;
   return (
-    <span className="inline-flex items-center gap-1 ml-2 text-xs opacity-60 font-normal">
+    <span
+      className="inline-flex items-center gap-1 ml-2 text-xs font-normal"
+      style={{ opacity: 0.5 }}
+    >
       <CornerDownLeft className="w-3 h-3" />
       Enter
     </span>
   );
 };
 
-// --- Main Component ---
+// Window controls strip (shared between loading and full view)
+const WindowControls: React.FC = () => (
+  <div
+    data-tauri-drag-region
+    className="flex items-center justify-end shrink-0 h-9 px-2 select-none"
+  >
+    <div className="flex items-center gap-0.5">
+      <button
+        onClick={() => appWindow.minimize()}
+        className="w-7 h-7 inline-flex items-center justify-center rounded-lg transition-colors"
+        style={{ color: "rgba(255,255,255,0.3)" }}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,214,10,0.15)";
+          (e.currentTarget as HTMLButtonElement).style.color = "#ffd60a";
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+          (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.3)";
+        }}
+        title="Minimizar"
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={() => appWindow.close()}
+        className="w-7 h-7 inline-flex items-center justify-center rounded-lg transition-colors"
+        style={{ color: "rgba(255,255,255,0.3)" }}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,69,58,0.15)";
+          (e.currentTarget as HTMLButtonElement).style.color = "#ff453a";
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+          (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.3)";
+        }}
+        title="Fechar"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  </div>
+);
+
 const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
   const [flowState, setFlowState] = useState<VaultFlowState>("loading");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Inline error states
   const [inlineError, setInlineError] = useState("");
   const [shakeField, setShakeField] = useState(false);
   const [confirmTouched, setConfirmTouched] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
-
-  // Timestamp of last access
   const [lastAccess, setLastAccess] = useState<string | null>(null);
-
-  // Transition direction tracking
   const [transitionKey, setTransitionKey] = useState(0);
 
   const { error, success } = useToast() as any;
   const { login } = useAuth();
 
-  // --- Shake trigger helper ---
   const triggerShake = () => {
     setShakeField(true);
     setTimeout(() => setShakeField(false), 450);
   };
 
-  // --- Clear state on flow change ---
   const navigateTo = useCallback((state: VaultFlowState) => {
     setPassword("");
     setConfirmPassword("");
@@ -294,13 +303,11 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setFlowState(state);
   }, []);
 
-  // --- Fetch last access timestamp ---
   const fetchLastAccess = useCallback(async () => {
     try {
       const ts = await invoke<string | null>("get_vault_last_access");
       setLastAccess(ts);
     } catch {
-      // Silently ignore — feature is non-critical
       setLastAccess(null);
     }
   }, []);
@@ -313,7 +320,6 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setFlowState("loading");
     try {
       const configured = await invoke<boolean>("is_vault_configured");
-
       if (configured) {
         const locked = await invoke<boolean>("is_vault_locked");
         if (locked) {
@@ -338,7 +344,6 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setInlineError("");
     try {
       await login();
-
       const hasSyncedVault = await invoke<boolean>("check_synced_vault");
       if (hasSyncedVault) {
         if (success) success("Cofre sincronizado encontrado!");
@@ -357,7 +362,6 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     setInlineError("");
-
     if (password.length < 8) {
       setInlineError("A Master Password deve ter pelo menos 8 caracteres.");
       triggerShake();
@@ -368,7 +372,6 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
       triggerShake();
       return;
     }
-
     setSubmitting(true);
     try {
       await invoke("setup_vault", { password });
@@ -412,14 +415,8 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
       window.dispatchEvent(new Event("vault-unlocked"));
     } catch (err: any) {
       const msg = err.toString();
-      if (
-        msg.includes("Senha incorreta") ||
-        msg.includes("incorrect") ||
-        msg.includes("decrypt")
-      ) {
-        setInlineError(
-          "Senha incorreta. Use a Master Password original deste cofre.",
-        );
+      if (msg.includes("Senha incorreta") || msg.includes("incorrect") || msg.includes("decrypt")) {
+        setInlineError("Senha incorreta. Use a Master Password original deste cofre.");
       } else if (msg.includes("não foi encontrado")) {
         setInlineError("Cofre sincronizado não encontrado no dispositivo.");
       } else {
@@ -432,68 +429,42 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     }
   };
 
-  // --- Derived validation for setup confirm ---
   const confirmMismatch =
-    confirmTouched &&
-    confirmPassword.length > 0 &&
-    password !== confirmPassword;
+    confirmTouched && confirmPassword.length > 0 && password !== confirmPassword;
   const passwordStrength = evaluatePasswordStrength(password);
 
-  // --- Render Logic ---
   const [isFullyUnlocked, setIsFullyUnlocked] = useState(false);
 
   useEffect(() => {
     invoke<boolean>("is_vault_configured").then((c) => {
-      if (c)
-        invoke<boolean>("is_vault_locked").then((l) => setIsFullyUnlocked(!l));
+      if (c) invoke<boolean>("is_vault_locked").then((l) => setIsFullyUnlocked(!l));
     });
-
     const handler = () => setIsFullyUnlocked(true);
     window.addEventListener("vault-unlocked", handler);
     return () => window.removeEventListener("vault-unlocked", handler);
   }, []);
 
-  if (isFullyUnlocked) {
-    return <>{children}</>;
-  }
+  if (isFullyUnlocked) return <>{children}</>;
 
   if (flowState === "loading") {
     return (
-      <div className="flex flex-col h-screen w-screen bg-background text-slate-500 z-[9999] absolute inset-0">
-        {/* Window control bar */}
-        <div
-          data-tauri-drag-region
-          className="flex items-center justify-end shrink-0 h-9 px-2 select-none"
-        >
-          <div className="flex items-center">
-            <button
-              onClick={() => appWindow.minimize()}
-              className="w-8 h-8 inline-flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors"
-              title="Minimizar"
-              aria-label="Minimizar"
-            >
-              <Minus className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => appWindow.close()}
-              className="w-8 h-8 inline-flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-              title="Fechar"
-              aria-label="Fechar"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+      <div className="flex flex-col h-screen w-screen z-[9999] absolute inset-0" style={{ background: "#000" }}>
+        <WindowControls />
         <div className="flex flex-1 items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div
+            className="w-8 h-8 rounded-full border-2 animate-spin"
+            style={{ borderColor: "rgba(255,255,255,0.1)", borderTopColor: "#0a84ff" }}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background text-foreground z-[9999] absolute inset-0">
-      {/* Inject keyframes */}
+    <div
+      className="flex flex-col h-screen w-screen z-[9999] absolute inset-0"
+      style={{ background: "#000" }}
+    >
       <style>{`
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
@@ -504,104 +475,90 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
           75% { transform: translateX(-2px); }
           90% { transform: translateX(1px); }
         }
-        .vault-shake {
-          animation: shake 0.4s ease-in-out;
-        }
+        .vault-shake { animation: shake 0.4s ease-in-out; }
       `}</style>
 
-      {/* ── Window control bar (drag + minimize/close) ── */}
-      <div
-        data-tauri-drag-region
-        className="flex items-center justify-end shrink-0 h-9 px-2 select-none"
-      >
-        <div className="flex items-center">
-          <button
-            onClick={() => appWindow.minimize()}
-            className="w-8 h-8 inline-flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors"
-            title="Minimizar"
-            aria-label="Minimizar"
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => appWindow.close()}
-            className="w-8 h-8 inline-flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-            title="Fechar"
-            aria-label="Fechar"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
+      <WindowControls />
 
-      {/* ── Centered content ── */}
-      <div className="flex flex-1 items-center justify-center">
-        <div className="w-full max-w-md p-8 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl relative overflow-hidden">
-          {/* Glow effect */}
-          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
-
+      {/* Centered content */}
+      <div className="flex flex-1 items-center justify-center px-4">
+        <div
+          className="w-full max-w-[400px] p-8 relative overflow-hidden"
+          style={{
+            background: "rgba(28,28,30,0.88)",
+            backdropFilter: "blur(40px) saturate(180%)",
+            WebkitBackdropFilter: "blur(40px) saturate(180%)",
+            border: "0.5px solid rgba(255,255,255,0.12)",
+            borderRadius: "24px",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.7), inset 0 0 0 0.5px rgba(255,255,255,0.06)",
+          }}
+        >
           {/* ===================== WELCOME ===================== */}
           {flowState === "welcome" && (
             <AnimatedPage flowKey={`welcome-${transitionKey}`}>
               <div className="text-center">
-                <div className="mx-auto w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-6 border border-slate-700/50">
+                <div
+                  className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
+                  style={{ background: "rgba(10,132,255,0.12)", border: "0.5px solid rgba(10,132,255,0.25)" }}
+                >
                   <ShieldAlert className="w-8 h-8 text-primary" />
                 </div>
-                <h1 className="text-2xl font-light mb-4">
+                <h1 className="text-[22px] font-semibold tracking-tight text-white mb-3">
                   Bem-vindo ao SSH Orchestrator
                 </h1>
-                <p className="text-sm text-slate-400 mb-8">
+                <p className="text-sm mb-8" style={{ color: "rgba(235,235,245,0.5)", lineHeight: "1.6" }}>
                   Para garantir a segurança zero-knowledge das suas credenciais,
-                  precisamos configurar o seu cofre local (Vault).
+                  configure o seu cofre local.
                 </p>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <button
                     onClick={handleLoginAndCheckSync}
                     disabled={submitting}
-                    className="w-full bg-[#24292e] hover:bg-[#2f363d] text-white py-3 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-3 border border-[#1b1f23]/10"
+                    className="w-full py-3 px-4 text-sm font-semibold text-white rounded-xl flex items-center justify-center gap-3 transition-colors disabled:opacity-50"
+                    style={{ background: "#0a84ff" }}
+                    onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#409cff"; }}
+                    onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
                   >
                     {submitting ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span className="text-slate-300">
-                          Aguardando autenticação no navegador...
-                        </span>
+                        <div
+                          className="w-4 h-4 rounded-full border-2 animate-spin"
+                          style={{ borderColor: "rgba(255,255,255,0.2)", borderTopColor: "white" }}
+                        />
+                        <span>Aguardando autenticação...</span>
                       </>
                     ) : (
                       <>
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                        >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
                         </svg>
-                        <span>Fazer Login com GitHub para Sincronizar</span>
+                        <span>Entrar com GitHub para Sincronizar</span>
                       </>
                     )}
                   </button>
 
                   {submitting && (
-                    <p className="text-xs text-slate-500 text-center">
-                      Uma janela do navegador foi aberta. Conclua o login por
-                      lá.
+                    <p className="text-xs text-center" style={{ color: "rgba(235,235,245,0.35)" }}>
+                      Uma janela do navegador foi aberta. Conclua o login por lá.
                     </p>
                   )}
 
-                  <div className="relative flex items-center py-2">
-                    <div className="flex-grow border-t border-slate-800"></div>
-                    <span className="flex-shrink-0 mx-4 text-slate-500 text-xs">
-                      OU
+                  <div className="relative flex items-center py-1">
+                    <div className="flex-grow" style={{ height: "0.5px", background: "rgba(255,255,255,0.08)" }} />
+                    <span className="flex-shrink-0 mx-4 text-xs" style={{ color: "rgba(235,235,245,0.3)" }}>
+                      ou
                     </span>
-                    <div className="flex-grow border-t border-slate-800"></div>
+                    <div className="flex-grow" style={{ height: "0.5px", background: "rgba(255,255,255,0.08)" }} />
                   </div>
 
                   <button
                     onClick={() => navigateTo("setup")}
                     disabled={submitting}
-                    className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 px-4 rounded-md text-sm font-medium transition-colors"
+                    className="w-full py-3 px-4 text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                    style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.75)" }}
+                    onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "rgba(255,255,255,0.14)"; }}
+                    onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                   >
                     Usar Apenas Localmente
                   </button>
@@ -613,35 +570,42 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
           {/* ===================== SETUP ===================== */}
           {flowState === "setup" && (
             <AnimatedPage flowKey={`setup-${transitionKey}`}>
-              {/* Back button */}
               <button
                 type="button"
                 onClick={() => navigateTo("welcome")}
-                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-6 group"
+                className="flex items-center gap-1.5 text-xs font-medium mb-6 group transition-colors"
+                style={{ color: "rgba(235,235,245,0.4)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(235,235,245,0.4)")}
               >
                 <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
                 Voltar
               </button>
 
               <div className="text-center mb-6">
-                <div className="mx-auto w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-700/50">
-                  <ShieldAlert className="w-8 h-8 text-amber-500" />
+                <div
+                  className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                  style={{ background: "rgba(255,159,10,0.12)", border: "0.5px solid rgba(255,159,10,0.25)" }}
+                >
+                  <ShieldAlert className="w-8 h-8" style={{ color: "#ff9f0a" }} />
                 </div>
-                <h2 className="text-xl font-light mb-2">Criar Vault</h2>
-                <p className="text-sm text-slate-400">
+                <h2 className="text-[20px] font-semibold tracking-tight text-white mb-2">
+                  Criar Vault
+                </h2>
+                <p className="text-sm" style={{ color: "rgba(235,235,245,0.5)" }}>
                   Crie uma Master Password forte para proteger seus dados.
                 </p>
               </div>
 
               {/* Warning box */}
-              <div className="flex items-start gap-3 p-3 mb-5 rounded-lg bg-amber-950/40 border border-amber-500/30">
-                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-200/90 leading-relaxed">
-                  <span className="font-semibold">
-                    Esta senha não pode ser recuperada.
-                  </span>{" "}
-                  Se você perdê-la, será impossível acessar seus servidores e
-                  dados criptografados.
+              <div
+                className="flex items-start gap-3 p-3 mb-5 rounded-xl"
+                style={{ background: "rgba(255,159,10,0.08)", border: "0.5px solid rgba(255,159,10,0.25)" }}
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#ff9f0a" }} />
+                <p className="text-xs leading-relaxed" style={{ color: "rgba(255,214,10,0.8)" }}>
+                  <span className="font-semibold">Esta senha não pode ser recuperada.</span>{" "}
+                  Se perdê-la, será impossível acessar seus dados criptografados.
                 </p>
               </div>
 
@@ -656,23 +620,23 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                     }}
                     placeholder="Mínimo de 8 caracteres"
                     autoFocus
-                    error={
-                      inlineError && !confirmMismatch ? inlineError : undefined
-                    }
+                    error={inlineError && !confirmMismatch ? inlineError : undefined}
                     shake={shakeField}
                     onCapsLock={setCapsLockOn}
                   />
 
-                  {/* Password strength bar */}
                   {password.length > 0 && (
                     <div className="mt-2">
-                      <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-1 w-full rounded-full overflow-hidden"
+                        style={{ background: "rgba(255,255,255,0.08)" }}
+                      >
                         <div
-                          className={`h-full rounded-full transition-all duration-300 ${passwordStrength.barColor}`}
-                          style={{ width: `${passwordStrength.percent}%` }}
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{ width: `${passwordStrength.percent}%`, background: passwordStrength.barColor }}
                         />
                       </div>
-                      <p className={`text-xs mt-1 ${passwordStrength.color}`}>
+                      <p className="text-xs mt-1 font-medium" style={{ color: passwordStrength.color }}>
                         {passwordStrength.label}
                       </p>
                     </div>
@@ -688,15 +652,12 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                     setInlineError("");
                   }}
                   placeholder="Repita a Master Password"
-                  error={
-                    confirmMismatch ? "As senhas não coincidem." : undefined
-                  }
+                  error={confirmMismatch ? "As senhas não coincidem." : undefined}
                   onCapsLock={setCapsLockOn}
                 />
 
-                {/* Caps Lock warning */}
                 {capsLockOn && (
-                  <div className="flex items-center gap-2 text-xs text-amber-400">
+                  <div className="flex items-center gap-2 text-xs" style={{ color: "#ffd60a" }}>
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                     Caps Lock está ativado
                   </div>
@@ -704,24 +665,16 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
 
                 <button
                   type="submit"
-                  disabled={
-                    submitting ||
-                    !password ||
-                    !confirmPassword ||
-                    confirmMismatch
-                  }
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-2.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4 flex items-center justify-center"
+                  disabled={submitting || !password || !confirmPassword || confirmMismatch}
+                  className="w-full py-2.5 text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-2 flex items-center justify-center text-white"
+                  style={{ background: "#0a84ff" }}
+                  onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#409cff"; }}
+                  onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
                 >
-                  {submitting ? (
-                    "Configurando..."
-                  ) : (
+                  {submitting ? "Configurando..." : (
                     <>
                       Concluir
-                      <EnterHint
-                        visible={
-                          !!password && !!confirmPassword && !confirmMismatch
-                        }
-                      />
+                      <EnterHint visible={!!password && !!confirmPassword && !confirmMismatch} />
                     </>
                   )}
                 </button>
@@ -733,18 +686,24 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
           {flowState === "unlock" && (
             <AnimatedPage flowKey={`unlock-${transitionKey}`}>
               <div className="text-center mb-8">
-                <div className="mx-auto w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-700/50">
+                <div
+                  className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                  style={{ background: "rgba(10,132,255,0.12)", border: "0.5px solid rgba(10,132,255,0.25)" }}
+                >
                   <Lock className="w-8 h-8 text-primary" />
                 </div>
-                <h2 className="text-xl font-light mb-2">Vault Trancado</h2>
-                <p className="text-sm text-slate-400">
-                  Digite sua Master Password para acessar suas configurações e
-                  servidores.
+                <h2 className="text-[20px] font-semibold tracking-tight text-white mb-2">
+                  Vault Bloqueado
+                </h2>
+                <p className="text-sm" style={{ color: "rgba(235,235,245,0.5)" }}>
+                  Digite sua Master Password para acessar seus servidores.
                 </p>
 
-                {/* Last access timestamp */}
                 {lastAccess && (
-                  <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-500">
+                  <div
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs"
+                    style={{ color: "rgba(235,235,245,0.35)" }}
+                  >
                     <Clock className="w-3 h-3" />
                     <span>Última sessão: {formatRelativeTime(lastAccess)}</span>
                   </div>
@@ -765,9 +724,8 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                   onCapsLock={setCapsLockOn}
                 />
 
-                {/* Caps Lock warning */}
                 {capsLockOn && (
-                  <div className="flex items-center gap-2 text-xs text-amber-400">
+                  <div className="flex items-center gap-2 text-xs" style={{ color: "#ffd60a" }}>
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                     Caps Lock está ativado
                   </div>
@@ -776,14 +734,15 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                 <button
                   type="submit"
                   disabled={submitting || !password}
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-2.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2 text-white"
+                  style={{ background: "#0a84ff" }}
+                  onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#409cff"; }}
+                  onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
                 >
                   <Lock className="w-4 h-4" />
-                  {submitting ? (
-                    "Acessando..."
-                  ) : (
+                  {submitting ? "Acessando..." : (
                     <>
-                      Destrancar Vault
+                      Desbloquear
                       <EnterHint visible={!!password} />
                     </>
                   )}
@@ -795,24 +754,31 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
           {/* ===================== UNLOCK SYNCED ===================== */}
           {flowState === "unlock_synced" && (
             <AnimatedPage flowKey={`unlock_synced-${transitionKey}`}>
-              {/* Back button */}
               <button
                 type="button"
                 onClick={() => navigateTo("welcome")}
-                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-6 group"
+                className="flex items-center gap-1.5 text-xs font-medium mb-6 group transition-colors"
+                style={{ color: "rgba(235,235,245,0.4)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(235,235,245,0.4)")}
               >
                 <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
                 Voltar
               </button>
 
               <div className="text-center mb-8">
-                <div className="mx-auto w-16 h-16 bg-blue-900/50 rounded-full flex items-center justify-center mb-4 border border-blue-500/50">
-                  <Cloud className="w-8 h-8 text-blue-400" />
+                <div
+                  className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                  style={{ background: "rgba(100,210,255,0.1)", border: "0.5px solid rgba(100,210,255,0.25)" }}
+                >
+                  <Cloud className="w-8 h-8" style={{ color: "#64d2ff" }} />
                 </div>
-                <h2 className="text-xl font-light mb-2">Cofre Sincronizado</h2>
-                <p className="text-sm text-slate-400">
-                  Encontramos um Vault sincronizado no seu repositório. Digite a
-                  Master Password original para restaurá-lo.
+                <h2 className="text-[20px] font-semibold tracking-tight text-white mb-2">
+                  Cofre Sincronizado
+                </h2>
+                <p className="text-sm" style={{ color: "rgba(235,235,245,0.5)" }}>
+                  Encontramos um Vault no seu repositório. Digite a Master
+                  Password original para restaurá-lo.
                 </p>
               </div>
               <form onSubmit={handleUnlockSynced} className="space-y-4">
@@ -828,12 +794,11 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                   error={inlineError || undefined}
                   shake={shakeField}
                   onCapsLock={setCapsLockOn}
-                  extraClass="border-blue-500/30"
+                  accentBlue
                 />
 
-                {/* Caps Lock warning */}
                 {capsLockOn && (
-                  <div className="flex items-center gap-2 text-xs text-amber-400">
+                  <div className="flex items-center gap-2 text-xs" style={{ color: "#ffd60a" }}>
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                     Caps Lock está ativado
                   </div>
@@ -842,14 +807,15 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                 <button
                   type="submit"
                   disabled={submitting || !password}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2 text-white"
+                  style={{ background: "#0a84ff" }}
+                  onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#409cff"; }}
+                  onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
                 >
                   <Lock className="w-4 h-4" />
-                  {submitting ? (
-                    "Restaurando..."
-                  ) : (
+                  {submitting ? "Restaurando..." : (
                     <>
-                      Restaurar e Destrancar
+                      Restaurar e Desbloquear
                       <EnterHint visible={!!password} />
                     </>
                   )}
@@ -859,7 +825,6 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
           )}
         </div>
       </div>
-      {/* end centered content */}
     </div>
   );
 };

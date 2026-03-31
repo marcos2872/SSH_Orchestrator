@@ -107,7 +107,8 @@ const TerminalWorkspace: React.FC<Props> = ({
         <Panel
           defaultSize={splitTab && splitMode !== "none" ? 50 : 100}
           minSize={20}
-          className="relative bg-[#0f172a]"
+          className="relative"
+          style={{ background: "#000000" }}
         >
           {mainTabs.map((tab) => {
             const isActive = tab.id === activeTabId;
@@ -124,17 +125,19 @@ const TerminalWorkspace: React.FC<Props> = ({
 
         {splitTab && splitMode !== "none" && (
           <>
-            <Separator
-              className={`
-                                ${orientation === "horizontal" ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}
-                                bg-slate-800 hover:bg-sky-600 transition-colors shrink-0
-                            `}
-            />
-            <Panel
-              defaultSize={50}
-              minSize={20}
-              className="relative bg-[#0f172a]"
-            >
+          <Separator
+            className={`
+                            ${orientation === "horizontal" ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize"}
+                            transition-colors shrink-0
+                        `}
+            style={{ background: "rgba(255,255,255,0.08)" }}
+          />
+          <Panel
+            defaultSize={50}
+            minSize={20}
+            className="relative"
+            style={{ background: "#000000" }}
+          >
               <div className="absolute inset-0 flex flex-col z-10">
                 {renderTabContent(splitTab, true, splitTermRef, splitLocalRef)}
               </div>

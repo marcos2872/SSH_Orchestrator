@@ -182,19 +182,29 @@ const LocalTerminal = React.forwardRef<LocalTerminalRef, Props>(
     };
 
     return (
-      <div className="flex flex-col h-full w-full bg-[#0f172a] relative">
+      <div className="flex flex-col h-full w-full relative" style={{ background: "#000000" }}>
         {/* Exited / reconnect */}
         {connState === "exited" && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-3">
             <button
               onClick={handleRestart}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-sm font-semibold rounded-lg transition-colors shadow-xl"
+              className="px-5 py-2 text-sm font-semibold rounded-xl transition-all active:scale-[0.98]"
+              style={{
+                background: "#32d74b",
+                color: "#000000",
+                boxShadow: "0 4px 16px rgba(50,215,75,0.35)",
+              }}
             >
               Reabrir
             </button>
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors shadow-xl"
+              className="px-5 py-2 text-sm font-semibold rounded-xl transition-all active:scale-[0.98]"
+              style={{
+                background: "rgba(255,255,255,0.1)",
+                color: "rgba(255,255,255,0.8)",
+                backdropFilter: "blur(10px)",
+              }}
             >
               Fechar
             </button>
@@ -202,10 +212,8 @@ const LocalTerminal = React.forwardRef<LocalTerminalRef, Props>(
         )}
 
         {/* xterm container */}
-        <div className="flex-1 p-3 pb-4 min-h-0 relative overflow-hidden flex flex-col">
-          <div
-            className={`flex-1 overflow-hidden relative p-1 border ${connState === "connected" ? "border-emerald-500/50 w-full h-full" : "border-transparent w-full h-full"}`}
-          >
+        <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-hidden relative w-full h-full">
             <div ref={terminalRef} className="h-full w-full" />
           </div>
         </div>

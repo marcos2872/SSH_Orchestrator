@@ -241,7 +241,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
     };
 
     return (
-      <div className="flex flex-col h-full w-full bg-[#0f172a] relative">
+      <div className="flex flex-col h-full w-full relative" style={{ background: "#000000" }}>
         {/* Password prompt */}
         {connState === "prompt" && isActive && (
           <Modal
@@ -250,11 +250,13 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
             title="Autenticação SSH"
             width="w-96"
           >
-            <p className="text-sm text-slate-400 font-mono mb-6">
+            <p className="text-xs font-mono mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
               {server.username}@{server.host}:{server.port}
             </p>
             <div className="mb-4">
-              <label className="block text-xs text-slate-500 mb-1">Senha</label>
+              <label className="block text-[11px] font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.45)" }}>
+                Senha
+              </label>
               <input
                 ref={passwordRef}
                 type="password"
@@ -264,24 +266,39 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
                   if (e.key === "Enter") handleConnect();
                 }}
                 placeholder="••••••••"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-xl px-3 py-2.5 text-sm font-mono transition-all focus:outline-none"
+                style={{
+                  background: "rgba(255,255,255,0.07)",
+                  border: "0.5px solid rgba(255,255,255,0.1)",
+                  color: "rgba(255,255,255,0.9)",
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.border = "0.5px solid #0a84ff";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)";
+                  e.currentTarget.style.boxShadow = "none";
+                }}
               />
             </div>
-            <p className="text-xs text-slate-600 mb-4">
+            <p className="text-xs mb-5" style={{ color: "rgba(255,255,255,0.25)" }}>
               Edite o servidor para salvar uma senha ou chave SSH e conectar sem
               digitar sempre.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={handleClose}
-                className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors"
+                className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all active:scale-[0.98]"
+                style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.8)" }}
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConnect}
                 disabled={!password}
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-sm font-semibold rounded-lg transition-colors"
+                className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all active:scale-[0.98] disabled:opacity-40"
+                style={{ background: "#0a84ff", color: "#ffffff" }}
               >
                 Conectar
               </button>
@@ -294,13 +311,23 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-3">
             <button
               onClick={handleReconnect}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-sm font-semibold rounded-lg transition-colors shadow-xl"
+              className="px-5 py-2 text-sm font-semibold rounded-xl transition-all active:scale-[0.98]"
+              style={{
+                background: "#0a84ff",
+                color: "#ffffff",
+                boxShadow: "0 4px 16px rgba(10,132,255,0.35)",
+              }}
             >
               Reconectar
             </button>
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors shadow-xl"
+              className="px-5 py-2 text-sm font-semibold rounded-xl transition-all active:scale-[0.98]"
+              style={{
+                background: "rgba(255,255,255,0.1)",
+                color: "rgba(255,255,255,0.8)",
+                backdropFilter: "blur(10px)",
+              }}
             >
               Fechar
             </button>
@@ -308,10 +335,8 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
         )}
 
         {/* xterm container */}
-        <div className="flex-1 p-3 pb-4 min-h-0 relative overflow-hidden flex flex-col">
-          <div
-            className={`flex-1 overflow-hidden relative p-1 border ${connState === "connected" ? "border-green-500/50 w-full h-full" : "border-transparent w-full h-full"}`}
-          >
+        <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-hidden relative w-full h-full">
             <div ref={terminalRef} className="h-full w-full" />
           </div>
         </div>

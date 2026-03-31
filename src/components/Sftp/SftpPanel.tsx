@@ -161,45 +161,74 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
 
     return (
         <div
-            className="flex flex-col h-full bg-slate-950 border-l border-slate-800 text-sm"
+            className="flex flex-col h-full text-sm"
+            style={{
+                background: "#000000",
+                borderLeft: "0.5px solid rgba(255,255,255,0.08)",
+            }}
             onClick={() => setCtxMenu(null)}
             onDragOver={e => e.preventDefault()}
             onDrop={handleDrop}
         >
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 shrink-0">
-                <span className="font-semibold text-slate-300 flex items-center gap-2">
+            <div
+                className="flex items-center justify-between px-3 py-2 shrink-0"
+                style={{
+                    background: "rgba(28,28,30,0.72)",
+                    backdropFilter: "blur(20px) saturate(180%)",
+                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                    borderBottom: "0.5px solid rgba(255,255,255,0.08)",
+                }}
+            >
+                <span className="font-semibold flex items-center gap-2" style={{ color: "rgba(255,255,255,0.75)" }}>
                     <span>📁</span> SFTP
                 </span>
                 <div className="flex gap-2">
                     <button
                         onClick={handleMkdir}
-                        className="text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
+                        className="text-xs px-2 py-0.5 rounded-lg transition-colors"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#ffffff"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                         title="Nova pasta"
                     >＋ Pasta</button>
                     <button
                         onClick={() => listDir(cwd)}
-                        className="text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
+                        className="text-xs px-2 py-0.5 rounded-lg transition-colors"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#ffffff"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                         title="Atualizar"
                     >↻</button>
-                    <button onClick={onClose} className="text-slate-500 hover:text-red-400 transition-colors">✕</button>
+                    <button
+                        onClick={onClose}
+                        className="transition-colors"
+                        style={{ color: "rgba(255,255,255,0.3)" }}
+                        onMouseEnter={e => { e.currentTarget.style.color = "#ff453a"; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
+                    >✕</button>
                 </div>
             </div>
 
             {/* Breadcrumb */}
-            <div className="flex items-center gap-1 px-3 py-1.5 border-b border-slate-800 shrink-0 overflow-x-auto">
+            <div
+                className="flex items-center gap-1 px-3 py-1.5 shrink-0 overflow-x-auto"
+                style={{ borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}
+            >
                 <button
                     onClick={() => listDir('/')}
-                    className="text-xs text-sky-400 hover:text-sky-300 font-mono shrink-0"
+                    className="text-xs font-mono shrink-0 transition-colors"
+                    style={{ color: "#0a84ff" }}
                 >/</button>
                 {breadcrumbs.map((seg, i) => {
                     const path = '/' + breadcrumbs.slice(0, i + 1).join('/');
                     return (
                         <React.Fragment key={path}>
-                            <span className="text-slate-600 shrink-0">/</span>
+                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
                             <button
                                 onClick={() => listDir(path)}
-                                className="text-xs text-sky-400 hover:text-sky-300 font-mono shrink-0"
+                                className="text-xs font-mono shrink-0 transition-colors"
+                                style={{ color: "#0a84ff" }}
                             >{seg}</button>
                         </React.Fragment>
                     );
@@ -208,17 +237,23 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
 
             {/* Active transfers */}
             {activeTransfers.length > 0 && (
-                <div className="px-3 py-2 border-b border-slate-800 shrink-0 space-y-1">
+                <div
+                    className="px-3 py-2 shrink-0 space-y-1"
+                    style={{ borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}
+                >
                     {activeTransfers.map(t => (
                         <div key={t.file}>
-                            <div className="flex justify-between text-xs text-slate-400 mb-0.5">
+                            <div className="flex justify-between text-xs mb-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>
                                 <span className="truncate max-w-[160px]">{t.file}</span>
                                 <span>{t.progress}%</span>
                             </div>
-                            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
                                 <div
-                                    className="h-full bg-sky-500 transition-all duration-200 rounded-full"
-                                    style={{ width: `${t.progress}%` }}
+                                    className="h-full transition-all duration-200 rounded-full"
+                                    style={{
+                                        width: `${t.progress}%`,
+                                        background: "linear-gradient(90deg, #0a84ff, #64d2ff)",
+                                    }}
                                 />
                             </div>
                         </div>
@@ -229,54 +264,73 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
             {/* File list */}
             <div className="flex-1 overflow-y-auto">
                 {loading && (
-                    <div className="flex items-center justify-center h-20 text-slate-500">
-                        <span className="animate-pulse">Carregando...</span>
+                    <div className="flex items-center justify-center h-20" style={{ color: "rgba(255,255,255,0.3)" }}>
+                        <span className="animate-pulse text-xs">Carregando...</span>
                     </div>
                 )}
                 {error && (
-                    <div className="p-3 text-xs text-red-400 bg-red-950/20">⚠ {error}</div>
+                    <div className="p-3 text-xs" style={{ color: "#ff453a", background: "rgba(255,69,58,0.08)" }}>⚠ {error}</div>
                 )}
                 {!loading && !sessionId && (
-                    <div className="flex items-center justify-center h-full text-slate-600 text-xs px-4 text-center">
+                    <div className="flex items-center justify-center h-full text-xs px-4 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>
                         Conecte-se via SSH primeiro para usar o SFTP
                     </div>
                 )}
                 {!loading && sftpSessionId && entries.length === 0 && (
-                    <div className="flex items-center justify-center h-20 text-slate-600 text-xs">
+                    <div className="flex items-center justify-center h-20 text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>
                         Pasta vazia
                     </div>
                 )}
                 {!loading && entries.map(entry => (
                     <div
                         key={entry.path}
-                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-900 cursor-pointer select-none group"
+                        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none transition-colors"
+                        style={{ color: "rgba(255,255,255,0.75)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
                         onDoubleClick={() => entry.is_dir ? listDir(entry.path) : null}
                         onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, entry }); }}
                     >
                         <span className="shrink-0">{entry.is_dir ? '📂' : '📄'}</span>
-                        <span className="flex-1 truncate text-xs text-slate-200 font-mono">{entry.name}</span>
+                        <span className="flex-1 truncate text-xs font-mono">{entry.name}</span>
                         {!entry.is_dir && (
-                            <span className="text-xs text-slate-600 shrink-0">{formatSize(entry.size)}</span>
+                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>{formatSize(entry.size)}</span>
                         )}
                     </div>
                 ))}
             </div>
 
             {/* Drop zone hint */}
-            <div className="px-3 py-2 border-t border-slate-800 text-xs text-slate-600 text-center shrink-0">
+            <div
+                className="px-3 py-2 text-xs text-center shrink-0"
+                style={{
+                    borderTop: "0.5px solid rgba(255,255,255,0.06)",
+                    color: "rgba(255,255,255,0.2)",
+                }}
+            >
                 Arraste arquivos aqui para fazer upload
             </div>
 
             {/* Context menu */}
             {ctxMenu && (
                 <div
-                    className="fixed z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1 w-44"
-                    style={{ top: ctxMenu.y, left: ctxMenu.x }}
+                    className="fixed z-50 rounded-2xl shadow-2xl py-1 w-44"
+                    style={{
+                        top: ctxMenu.y,
+                        left: ctxMenu.x,
+                        background: "rgba(44,44,46,0.92)",
+                        backdropFilter: "blur(20px) saturate(180%)",
+                        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                        border: "0.5px solid rgba(255,255,255,0.12)",
+                    }}
                     onClick={e => e.stopPropagation()}
                 >
                     {!ctxMenu.entry.is_dir && (
                         <button
-                            className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                            className="w-full text-left px-3 py-1.5 text-xs transition-colors"
+                            style={{ color: "rgba(255,255,255,0.75)" }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#ffffff"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}
                             onClick={async () => {
                                 if (!sftpSessionId) return;
                                 const { remote, local } = { remote: ctxMenu.entry.path, local: `/tmp/${ctxMenu.entry.name}` };
@@ -286,13 +340,19 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
                         >⬇ Fazer download</button>
                     )}
                     <button
-                        className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        className="w-full text-left px-3 py-1.5 text-xs transition-colors"
+                        style={{ color: "rgba(255,255,255,0.75)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#ffffff"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}
                         onClick={() => {
                             setRenaming({ entry: ctxMenu.entry, newName: ctxMenu.entry.name });
                         }}
                     >✏️ Renomear</button>
                     <button
-                        className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-950/30 hover:text-red-300 transition-colors"
+                        className="w-full text-left px-3 py-1.5 text-xs transition-colors"
+                        style={{ color: "#ff453a" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,69,58,0.1)"; e.currentTarget.style.color = "#ff6961"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#ff453a"; }}
                         onClick={() => handleDelete(ctxMenu.entry)}
                     >🗑 Excluir</button>
                 </div>
@@ -300,19 +360,42 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
 
             {/* Rename dialog */}
             {renaming && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 shadow-2xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+                    <div
+                        className="rounded-3xl p-6 w-80 shadow-2xl"
+                        style={{
+                            background: "rgba(28,28,30,0.95)",
+                            backdropFilter: "blur(40px) saturate(180%)",
+                            WebkitBackdropFilter: "blur(40px) saturate(180%)",
+                            border: "0.5px solid rgba(255,255,255,0.12)",
+                        }}
+                    >
                         <h3 className="text-sm font-semibold mb-3">Renomear</h3>
                         <input
                             autoFocus
                             value={renaming.newName}
                             onChange={e => setRenaming({ ...renaming, newName: e.target.value })}
                             onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenaming(null); }}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="w-full rounded-xl px-3 py-2 text-sm font-mono mb-3 transition-all focus:outline-none"
+                            style={{
+                                background: "rgba(255,255,255,0.07)",
+                                border: "0.5px solid rgba(255,255,255,0.1)",
+                                color: "rgba(255,255,255,0.9)",
+                            }}
+                            onFocus={e => { e.currentTarget.style.border = "0.5px solid #0a84ff"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)"; }}
+                            onBlur={e => { e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)"; e.currentTarget.style.boxShadow = "none"; }}
                         />
-                        <div className="flex gap-2 mt-3">
-                            <button onClick={() => setRenaming(null)} className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg transition-colors">Cancelar</button>
-                            <button onClick={handleRenameSubmit} className="flex-1 py-1.5 bg-sky-600 hover:bg-sky-500 text-xs rounded-lg transition-colors">Renomear</button>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setRenaming(null)}
+                                className="flex-1 py-1.5 text-xs rounded-xl transition-all"
+                                style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}
+                            >Cancelar</button>
+                            <button
+                                onClick={handleRenameSubmit}
+                                className="flex-1 py-1.5 text-xs rounded-xl transition-all"
+                                style={{ background: "#0a84ff", color: "#ffffff" }}
+                            >Renomear</button>
                         </div>
                     </div>
                 </div>
@@ -320,8 +403,16 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
 
             {/* Mkdir dialog */}
             {mkdirDialog.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 shadow-2xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+                    <div
+                        className="rounded-3xl p-6 w-80 shadow-2xl"
+                        style={{
+                            background: "rgba(28,28,30,0.95)",
+                            backdropFilter: "blur(40px) saturate(180%)",
+                            WebkitBackdropFilter: "blur(40px) saturate(180%)",
+                            border: "0.5px solid rgba(255,255,255,0.12)",
+                        }}
+                    >
                         <h3 className="text-sm font-semibold mb-3">Nova Pasta</h3>
                         <input
                             autoFocus
@@ -329,11 +420,27 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
                             onChange={e => setMkdirDialog(d => ({ ...d, value: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') handleMkdirSubmit(); if (e.key === 'Escape') setMkdirDialog({ open: false, value: '' }); }}
                             placeholder="Nome da pasta"
-                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            className="w-full rounded-xl px-3 py-2 text-sm font-mono mb-3 transition-all focus:outline-none"
+                            style={{
+                                background: "rgba(255,255,255,0.07)",
+                                border: "0.5px solid rgba(255,255,255,0.1)",
+                                color: "rgba(255,255,255,0.9)",
+                            }}
+                            onFocus={e => { e.currentTarget.style.border = "0.5px solid #0a84ff"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)"; }}
+                            onBlur={e => { e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)"; e.currentTarget.style.boxShadow = "none"; }}
                         />
-                        <div className="flex gap-2 mt-3">
-                            <button onClick={() => setMkdirDialog({ open: false, value: '' })} className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg transition-colors">Cancelar</button>
-                            <button onClick={handleMkdirSubmit} disabled={!mkdirDialog.value.trim()} className="flex-1 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-xs rounded-lg transition-colors">Criar</button>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setMkdirDialog({ open: false, value: '' })}
+                                className="flex-1 py-1.5 text-xs rounded-xl transition-all"
+                                style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}
+                            >Cancelar</button>
+                            <button
+                                onClick={handleMkdirSubmit}
+                                disabled={!mkdirDialog.value.trim()}
+                                className="flex-1 py-1.5 text-xs rounded-xl transition-all disabled:opacity-40"
+                                style={{ background: "#0a84ff", color: "#ffffff" }}
+                            >Criar</button>
                         </div>
                     </div>
                 </div>

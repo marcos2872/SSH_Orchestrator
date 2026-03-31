@@ -4,19 +4,19 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  /* SF Pro quando disponível no macOS, Inter como fallback de alta qualidade */
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Inter", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0f172a;
-  color: #f8fafc;
+  background-color: #000000;
+  color: #ffffff;
 }
 
 /* ─── Custom TitleBar ─────────────────────────────────────────── */
 :root {
-  --titlebar-bg: #0b1120;
-  --titlebar-border: rgba(99, 136, 255, 0.12);
+  --titlebar-bg: rgba(28, 28, 30, 0.72);
+  --titlebar-border: rgba(255, 255, 255, 0.08);
   --titlebar-height: 38px;
 }
 
@@ -27,7 +27,9 @@ body {
   height: var(--titlebar-height);
   min-height: var(--titlebar-height);
   background: var(--titlebar-bg);
-  border-bottom: 1px solid var(--titlebar-border);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 0.5px solid var(--titlebar-border);
   user-select: none;
   position: relative;
   z-index: 9999;
@@ -45,16 +47,16 @@ body {
 .titlebar-icon {
   display: flex;
   align-items: center;
-  color: #6388ff;
-  opacity: 0.85;
+  color: rgba(255, 255, 255, 0.75);
+  opacity: 0.9;
 }
 
 .titlebar-title {
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: #94a3b8;
-  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: none;
 }
 
 /* Zona central — drag invisível */
@@ -73,9 +75,9 @@ body {
 
 /* ─── Separador vertical ─── */
 .titlebar-separator {
-  width: 1px;
+  width: 0.5px;
   height: 16px;
-  background: var(--titlebar-border);
+  background: rgba(255, 255, 255, 0.1);
   margin: 0 4px;
   flex-shrink: 0;
 }
@@ -94,25 +96,25 @@ body {
   gap: 6px;
   height: 24px;
   padding: 0 10px;
-  border: 1px solid rgba(99, 136, 255, 0.25);
-  background: rgba(99, 136, 255, 0.08);
-  border-radius: 5px;
-  color: #8aa4ff;
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.75);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .titlebar-login-btn:hover:not(:disabled) {
-  background: rgba(99, 136, 255, 0.18);
-  border-color: rgba(99, 136, 255, 0.5);
-  color: #b8c8ff;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .titlebar-login-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: default;
 }
 
@@ -120,8 +122,8 @@ body {
 .titlebar-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(99, 136, 255, 0.25);
-  border-top-color: #8aa4ff;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.7);
   border-radius: 50%;
   animation: titlebar-spin 0.7s linear infinite;
   flex-shrink: 0;
@@ -140,23 +142,23 @@ body {
   gap: 6px;
   height: 26px;
   padding: 0 6px 0 3px;
-  border: 1px solid transparent;
+  border: 0.5px solid transparent;
   background: transparent;
-  border-radius: 5px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .titlebar-avatar-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--titlebar-border);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .titlebar-avatar {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 1px solid rgba(99, 136, 255, 0.3);
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -164,7 +166,7 @@ body {
 .titlebar-username {
   font-size: 11px;
   font-weight: 500;
-  color: #94a3b8;
+  color: rgba(255, 255, 255, 0.55);
   max-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -172,7 +174,7 @@ body {
 }
 
 .titlebar-chevron {
-  color: #475569;
+  color: rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
   transition: transform 0.2s;
 }
@@ -187,10 +189,12 @@ body {
   top: calc(100% + 6px);
   right: 0;
   min-width: 220px;
-  background: #0f172a;
-  border: 1px solid rgba(99, 136, 255, 0.15);
-  border-radius: 10px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  background: rgba(44, 44, 46, 0.92);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.06) inset;
   z-index: 10000;
   overflow: hidden;
   animation: dropdown-in 0.15s ease;
@@ -219,7 +223,7 @@ body {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  border: 2px solid rgba(99, 136, 255, 0.3);
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
   flex-shrink: 0;
   object-fit: cover;
 }
@@ -227,7 +231,7 @@ body {
 .titlebar-dropdown-name {
   font-size: 13px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: rgba(255, 255, 255, 0.9);
   margin: 0 0 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -237,13 +241,13 @@ body {
 
 .titlebar-dropdown-login {
   font-size: 11px;
-  color: #64748b;
+  color: rgba(235, 235, 245, 0.4);
   margin: 0 0 1px;
 }
 
 .titlebar-dropdown-email {
   font-size: 11px;
-  color: #475569;
+  color: rgba(235, 235, 245, 0.3);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -252,8 +256,8 @@ body {
 }
 
 .titlebar-dropdown-divider {
-  height: 1px;
-  background: rgba(99, 136, 255, 0.08);
+  height: 0.5px;
+  background: rgba(255, 255, 255, 0.08);
   margin: 0;
 }
 
@@ -266,29 +270,30 @@ body {
   border: none;
   background: transparent;
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.12s;
   box-shadow: none;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .titlebar-dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
   border: none;
   border-color: transparent;
 }
 
 .titlebar-dropdown-item:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   border-color: transparent;
 }
 
 .titlebar-dropdown-logout {
-  color: #f87171;
+  color: #ff453a;
 }
 
 .titlebar-dropdown-logout:hover {
-  background: rgba(248, 113, 113, 0.08) !important;
+  background: rgba(255, 69, 58, 0.1) !important;
 }
 
 /* ─── Controles da Janela ─── */
@@ -306,30 +311,30 @@ body {
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
-  color: #475569;
+  color: rgba(255, 255, 255, 0.3);
   transition: background 0.15s, color 0.15s;
   padding: 0;
 }
 
 .titlebar-btn:hover {
-  color: #e2e8f0;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .titlebar-btn-minimize:hover {
-  background: rgba(251, 191, 36, 0.18);
-  color: #fbbf24;
+  background: rgba(255, 214, 10, 0.15);
+  color: #ffd60a;
 }
 
 .titlebar-btn-maximize:hover {
-  background: rgba(52, 211, 153, 0.18);
-  color: #34d399;
+  background: rgba(50, 215, 75, 0.15);
+  color: #32d74b;
 }
 
 .titlebar-btn-close:hover {
-  background: rgba(248, 113, 113, 0.18);
-  color: #f87171;
+  background: rgba(255, 69, 58, 0.15);
+  color: #ff453a;
 }
 
 .titlebar-btn:active {

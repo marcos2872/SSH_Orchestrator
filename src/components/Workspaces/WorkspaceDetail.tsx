@@ -28,14 +28,14 @@ interface Props {
 }
 
 const COLORS = [
-  "#3b82f6",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#ec4899",
-  "#06b6d4",
-  "#84cc16",
+  "#0a84ff",
+  "#32d74b",
+  "#ff9f0a",
+  "#ff453a",
+  "#bf5af2",
+  "#ff375f",
+  "#64d2ff",
+  "#30d158",
 ];
 
 const WorkspaceDetail: React.FC<Props> = ({
@@ -51,14 +51,12 @@ const WorkspaceDetail: React.FC<Props> = ({
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [confirmDeleteServerId, setConfirmDeleteServerId] = useState<
     string | null
   >(null);
 
-  // Workspace edit state
   const [wsName, setWsName] = useState(workspace.name);
   const [wsColor, setWsColor] = useState(workspace.color);
   const [wsSyncEnabled, setWsSyncEnabled] = useState(
@@ -69,10 +67,7 @@ const WorkspaceDetail: React.FC<Props> = ({
 
   useEffect(() => {
     loadServers();
-
-    const handleUpdate = () => {
-      loadServers();
-    };
+    const handleUpdate = () => loadServers();
     window.addEventListener("workspaces-updated", handleUpdate);
     return () => window.removeEventListener("workspaces-updated", handleUpdate);
   }, [workspace.id]);
@@ -140,14 +135,27 @@ const WorkspaceDetail: React.FC<Props> = ({
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-900/50 backdrop-blur-sm shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Monitor className="text-primary w-5 h-5" />
+      <header
+        className="h-14 flex items-center justify-between px-6 shrink-0"
+        style={{
+          background: "rgba(28,28,30,0.6)",
+          backdropFilter: "blur(20px) saturate(180%)",
+          WebkitBackdropFilter: "blur(20px) saturate(180%)",
+          borderBottom: "0.5px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="p-1.5 rounded-xl"
+            style={{ background: "rgba(10,132,255,0.15)" }}
+          >
+            <Monitor className="text-primary w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">{workspace.name}</h2>
-            <p className="text-xs text-slate-500">
+            <h2 className="text-[15px] font-semibold text-white leading-tight">
+              {workspace.name}
+            </h2>
+            <p className="text-[11px]" style={{ color: "rgba(235,235,245,0.4)" }}>
               {servers.length} servidor{servers.length !== 1 ? "es" : ""}
             </p>
           </div>
@@ -155,9 +163,12 @@ const WorkspaceDetail: React.FC<Props> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-primary hover:bg-blue-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-semibold text-white transition-colors"
+            style={{ background: "#0a84ff" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "#409cff")}
+            onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             Adicionar Servidor
           </button>
           <button
@@ -166,36 +177,74 @@ const WorkspaceDetail: React.FC<Props> = ({
               setConfirmDeleteWs(false);
             }}
             title="Configurações do Workspace"
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+            className="p-2 rounded-xl transition-colors"
+            style={{ color: "rgba(255,255,255,0.4)" }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)";
+              (e.currentTarget as HTMLButtonElement).style.color = "white";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+              (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.4)";
+            }}
           >
-            <Settings className="w-5 h-5" />
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </header>
 
       {/* Server grid */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-slate-500 text-sm">
+          <div
+            className="flex items-center justify-center py-20 text-sm"
+            style={{ color: "rgba(235,235,245,0.35)" }}
+          >
             Carregando servidores...
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {/* ── Fixed Local Shell card ── */}
-            <div className="bg-secondary/40 border border-emerald-500/30 p-5 rounded-xl hover:border-emerald-500/60 transition-all group">
-              <div className="flex items-start justify-between mb-3">
-                <div className="p-2 bg-emerald-500/10 rounded-lg group-hover:bg-emerald-500/20 transition-colors">
-                  <TerminalIcon className="w-5 h-5 text-emerald-400" />
+            <div
+              className="p-5 rounded-2xl transition-all group cursor-pointer"
+              style={{
+                background: "rgba(50,215,75,0.06)",
+                border: "0.5px solid rgba(50,215,75,0.2)",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.background = "rgba(50,215,75,0.1)";
+                (e.currentTarget as HTMLDivElement).style.border = "0.5px solid rgba(50,215,75,0.35)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.background = "rgba(50,215,75,0.06)";
+                (e.currentTarget as HTMLDivElement).style.border = "0.5px solid rgba(50,215,75,0.2)";
+              }}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div
+                  className="p-2 rounded-xl transition-colors"
+                  style={{ background: "rgba(50,215,75,0.12)" }}
+                >
+                  <TerminalIcon className="w-4 h-4" style={{ color: "#32d74b" }} />
                 </div>
               </div>
-              <h3 className="font-semibold mb-1">Terminal Local</h3>
-              <p className="text-xs text-slate-400 font-mono mb-4">
+              <h3 className="font-semibold text-[15px] text-white mb-1">Terminal Local</h3>
+              <p
+                className="text-xs font-mono mb-4"
+                style={{ color: "rgba(235,235,245,0.45)" }}
+              >
                 Shell do sistema
               </p>
-              <div className="flex items-center gap-2 pt-4 border-t border-slate-800">
+              <div
+                className="flex items-center gap-2 pt-4"
+                style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}
+              >
                 <button
                   onClick={onOpenLocal}
-                  className="flex-1 py-2 text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-md transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 py-2 text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                  style={{ background: "rgba(50,215,75,0.12)", color: "#32d74b" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(50,215,75,0.2)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "rgba(50,215,75,0.12)")}
                 >
                   <TerminalIcon className="w-3 h-3" /> Abrir
                 </button>
@@ -205,60 +254,116 @@ const WorkspaceDetail: React.FC<Props> = ({
             {servers.map((server) => (
               <div
                 key={server.id}
-                className="bg-secondary/40 border border-slate-800 p-5 rounded-xl hover:border-primary/50 transition-all group"
+                className="p-5 rounded-2xl transition-all group"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "0.5px solid rgba(255,255,255,0.08)",
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.07)";
+                  (e.currentTarget as HTMLDivElement).style.border = "0.5px solid rgba(10,132,255,0.3)";
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.04)";
+                  (e.currentTarget as HTMLDivElement).style.border = "0.5px solid rgba(255,255,255,0.08)";
+                }}
               >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-primary/20 transition-colors">
-                    <TerminalIcon className="w-5 h-5 text-slate-400 group-hover:text-primary" />
+                <div className="flex items-start justify-between mb-4">
+                  <div
+                    className="p-2 rounded-xl transition-colors group-hover:bg-[rgba(10,132,255,0.15)]"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                  >
+                    <TerminalIcon
+                      className="w-4 h-4 transition-colors group-hover:text-primary"
+                      style={{ color: "rgba(255,255,255,0.45)" }}
+                    />
                   </div>
                   <div className="flex items-center gap-1">
                     {server.has_saved_password && (
-                      <span
-                        title="Senha salva"
-                        className="p-1 text-green-500/70"
-                      >
-                        <Lock className="w-3 h-3" />
+                      <span title="Senha salva" className="p-1" style={{ color: "#32d74b" }}>
+                        <Lock className="w-3 h-3" style={{ opacity: 0.7 }} />
                       </span>
                     )}
                     {server.has_saved_ssh_key && (
-                      <span
-                        title="Chave SSH salva"
-                        className="p-1 text-blue-400/70"
-                      >
-                        <Key className="w-3 h-3" />
+                      <span title="Chave SSH salva" className="p-1" style={{ color: "#0a84ff" }}>
+                        <Key className="w-3 h-3" style={{ opacity: 0.7 }} />
                       </span>
                     )}
                     <button
                       onClick={() => setEditingServer(server)}
                       title="Editar servidor"
-                      className="p-1 opacity-0 group-hover:opacity-100 hover:bg-slate-700 rounded transition-all text-slate-400 hover:text-white"
+                      className="p-1 opacity-0 group-hover:opacity-100 rounded-lg transition-all"
+                      style={{ color: "rgba(255,255,255,0.45)" }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)";
+                        (e.currentTarget as HTMLButtonElement).style.color = "white";
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                        (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)";
+                      }}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setConfirmDeleteServerId(server.id)}
                       title="Excluir servidor"
-                      className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all text-slate-400 hover:text-red-400"
+                      className="p-1 opacity-0 group-hover:opacity-100 rounded-lg transition-all"
+                      style={{ color: "rgba(255,255,255,0.45)" }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,69,58,0.12)";
+                        (e.currentTarget as HTMLButtonElement).style.color = "#ff453a";
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                        (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)";
+                      }}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
-                <h3 className="font-semibold mb-1 truncate">{server.name}</h3>
-                <p className="text-xs text-slate-400 font-mono mb-4 truncate">
+                <h3 className="font-semibold text-[15px] text-white mb-1 truncate">
+                  {server.name}
+                </h3>
+                <p
+                  className="text-xs font-mono mb-4 truncate"
+                  style={{ color: "rgba(235,235,245,0.4)" }}
+                >
                   {server.username}@{server.host}:{server.port}
                 </p>
-                <div className="flex items-center gap-2 pt-4 border-t border-slate-800">
+                <div
+                  className="flex items-center gap-2 pt-4"
+                  style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}
+                >
                   <button
                     onClick={() => onConnect(server)}
-                    className="flex-1 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 rounded-md transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 py-2 text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 text-white/70"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "rgba(10,132,255,0.15)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "#0a84ff";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
+                    }}
                   >
                     <TerminalIcon className="w-3 h-3" /> Connect
                   </button>
                   <button
                     onClick={() => onSftp(server)}
                     title="SFTP"
-                    className="px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
+                    className="px-3 py-2 text-xs font-semibold rounded-xl transition-colors text-white/70"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "rgba(100,210,255,0.15)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "#64d2ff";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
+                    }}
                   >
                     <HardDrive className="w-3 h-3" />
                   </button>
@@ -267,17 +372,32 @@ const WorkspaceDetail: React.FC<Props> = ({
             ))}
 
             {servers.length === 0 && (
-              <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-800 rounded-2xl">
-                <Shield className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                <h3 className="text-slate-400 font-medium">
+              <div
+                className="col-span-full py-20 text-center rounded-3xl"
+                style={{
+                  border: "1.5px dashed rgba(255,255,255,0.08)",
+                }}
+              >
+                <Shield
+                  className="w-10 h-10 mx-auto mb-4"
+                  style={{ color: "rgba(255,255,255,0.12)" }}
+                />
+                <h3
+                  className="font-medium mb-2"
+                  style={{ color: "rgba(235,235,245,0.5)" }}
+                >
                   Nenhum servidor neste workspace
                 </h3>
-                <p className="text-sm text-slate-600 mb-6">
+                <p
+                  className="text-sm mb-6"
+                  style={{ color: "rgba(235,235,245,0.3)" }}
+                >
                   Comece adicionando um novo host.
                 </p>
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="text-primary text-sm font-semibold hover:underline"
+                  className="text-sm font-semibold hover:underline"
+                  style={{ color: "#0a84ff" }}
                 >
                   Criar primeiro servidor
                 </button>
@@ -313,45 +433,62 @@ const WorkspaceDetail: React.FC<Props> = ({
       >
         {!confirmDeleteWs ? (
           <>
-            <div className="space-y-4 mb-6">
+            <div className="space-y-5 mb-6">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">
+                <label
+                  className="block text-[11px] font-medium mb-1.5"
+                  style={{ color: "rgba(235,235,245,0.4)" }}
+                >
                   Nome do Workspace
                 </label>
                 <input
                   value={wsName}
                   onChange={(e) => setWsName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none"
+                  style={{
+                    background: "rgba(255,255,255,0.07)",
+                    border: "0.5px solid rgba(255,255,255,0.1)",
+                  }}
+                  onFocus={e => (e.currentTarget.style.border = "0.5px solid rgba(10,132,255,0.7)")}
+                  onBlur={e => (e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)")}
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <label className="block text-xs text-slate-500">
-                  Sincronizar no GitHub (Smart Sync)
+              <div className="flex items-center justify-between py-1">
+                <label
+                  className="text-[13px] font-medium"
+                  style={{ color: "rgba(235,235,245,0.7)" }}
+                >
+                  Sincronizar no GitHub
                 </label>
                 <button
                   type="button"
                   onClick={() => setWsSyncEnabled(!wsSyncEnabled)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-opacity-75 ${wsSyncEnabled ? "bg-primary" : "bg-slate-700"}`}
+                  className="relative inline-flex h-[22px] w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                  style={{ background: wsSyncEnabled ? "#0a84ff" : "rgba(255,255,255,0.15)" }}
                   role="switch"
                   aria-checked={wsSyncEnabled}
                 >
-                  <span className="sr-only">
-                    Usar configuração de Sincronização
-                  </span>
+                  <span className="sr-only">Usar configuração de Sincronização</span>
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${wsSyncEnabled ? "translate-x-4" : "translate-x-0"}`}
+                    className="pointer-events-none inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out"
+                    style={{ transform: wsSyncEnabled ? "translateX(18px)" : "translateX(0px)" }}
                   />
                 </button>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-2">Cor</label>
+                <label
+                  className="block text-[11px] font-medium mb-2"
+                  style={{ color: "rgba(235,235,245,0.4)" }}
+                >
+                  Cor
+                </label>
                 <div className="flex gap-2 flex-wrap">
                   {COLORS.map((c) => (
                     <button
                       key={c}
                       onClick={() => setWsColor(c)}
-                      className={`w-7 h-7 rounded-full transition-transform ${wsColor === c ? "scale-125 ring-2 ring-white" : "hover:scale-110"}`}
+                      className={`w-7 h-7 rounded-full transition-transform ${wsColor === c ? "scale-125 ring-2 ring-white/60" : "hover:scale-110"}`}
                       style={{ backgroundColor: c }}
                     />
                   ))}
@@ -362,14 +499,20 @@ const WorkspaceDetail: React.FC<Props> = ({
               <button
                 onClick={handleSaveWorkspace}
                 disabled={savingWs || !wsName.trim()}
-                className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary hover:bg-blue-600 disabled:opacity-50 text-sm font-semibold text-white rounded-lg transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 disabled:opacity-50 text-sm font-semibold text-white rounded-xl transition-colors"
+                style={{ background: "#0a84ff" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#409cff")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
               >
                 <Save className="w-4 h-4" />
                 {savingWs ? "Salvando..." : "Salvar"}
               </button>
               <button
                 onClick={() => setConfirmDeleteWs(true)}
-                className="px-4 py-2 text-red-400 hover:bg-red-500/10 text-sm font-semibold rounded-lg transition-colors border border-red-500/30"
+                className="px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors"
+                style={{ color: "#ff453a", background: "rgba(255,69,58,0.1)", border: "0.5px solid rgba(255,69,58,0.25)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,69,58,0.18)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,69,58,0.1)")}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -377,22 +520,28 @@ const WorkspaceDetail: React.FC<Props> = ({
           </>
         ) : (
           <>
-            <p className="text-sm text-slate-400 mb-2">
+            <p className="text-sm mb-2" style={{ color: "rgba(235,235,245,0.55)" }}>
               Excluir <strong className="text-white">{workspace.name}</strong>?
             </p>
-            <p className="text-xs text-red-400 mb-6">
+            <p className="text-xs mb-6" style={{ color: "#ff453a" }}>
               Todos os servidores serão excluídos permanentemente.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmDeleteWs(false)}
-                className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white rounded-lg transition-colors"
+                className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors text-white/70"
+                style={{ background: "rgba(255,255,255,0.08)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDeleteWorkspace}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold text-white rounded-lg transition-colors"
+                className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors text-white"
+                style={{ background: "#ff453a" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#ff6961")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#ff453a")}
               >
                 Excluir
               </button>
@@ -408,13 +557,16 @@ const WorkspaceDetail: React.FC<Props> = ({
         title="Excluir servidor?"
         width="w-96"
       >
-        <p className="text-sm text-slate-400 mb-6">
+        <p className="text-sm mb-6" style={{ color: "rgba(235,235,245,0.55)" }}>
           Esta ação não pode ser desfeita.
         </p>
         <div className="flex gap-3">
           <button
             onClick={() => setConfirmDeleteServerId(null)}
-            className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white rounded-lg transition-colors"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors text-white/70"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
           >
             Cancelar
           </button>
@@ -422,7 +574,10 @@ const WorkspaceDetail: React.FC<Props> = ({
             onClick={() =>
               confirmDeleteServerId && handleDeleteServer(confirmDeleteServerId)
             }
-            className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-sm font-semibold text-white rounded-lg transition-colors"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-colors text-white"
+            style={{ background: "#ff453a" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "#ff6961")}
+            onMouseLeave={e => (e.currentTarget.style.background = "#ff453a")}
           >
             Excluir
           </button>

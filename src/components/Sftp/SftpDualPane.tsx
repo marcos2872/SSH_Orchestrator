@@ -67,21 +67,35 @@ const FilePane: React.FC<PaneProps> = ({
 
     return (
         <div
-            className={`flex flex-col h-full min-w-0 transition-colors ${dropTarget ? 'bg-sky-950/30' : 'bg-slate-950'}`}
+            className={`flex flex-col h-full min-w-0 transition-colors`}
+            style={{
+                background: dropTarget ? "rgba(10,132,255,0.06)" : "#000000",
+            }}
             onDragOver={(e) => { e.preventDefault(); onDragOver(e, side); }}
             onDrop={() => onDrop(side, cwd)}
         >
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
+            <div
+                className="flex items-center justify-between px-3 py-2 shrink-0"
+                style={{
+                    background: "rgba(28,28,30,0.72)",
+                    backdropFilter: "blur(20px) saturate(180%)",
+                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                    borderBottom: "0.5px solid rgba(255,255,255,0.08)",
+                }}
+            >
                 <div className="flex items-center gap-2">
                     <span className="text-base">{icon}</span>
-                    <span className="text-xs font-semibold text-slate-300">{title}</span>
+                    <span className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.75)" }}>{title}</span>
                 </div>
                 <div className="flex items-center gap-1">
                     <button
                         onClick={onMkdir}
                         title="Nova Pasta"
-                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-sky-400 transition-colors"
+                        className="p-1 rounded-lg transition-colors"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#0a84ff"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                     >
                         <FolderPlus size={14} />
                     </button>
@@ -89,7 +103,10 @@ const FilePane: React.FC<PaneProps> = ({
                         onClick={() => selected && onRename(selected)}
                         disabled={!selected}
                         title="Renomear"
-                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-sky-400 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                        className="p-1 rounded-lg transition-colors disabled:opacity-30"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                        onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#0a84ff"; } }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                     >
                         <Pencil size={14} />
                     </button>
@@ -97,15 +114,21 @@ const FilePane: React.FC<PaneProps> = ({
                         onClick={() => selected && onDelete(selected)}
                         disabled={!selected}
                         title="Deletar"
-                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-red-400 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                        className="p-1 rounded-lg transition-colors disabled:opacity-30"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                        onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#ff453a"; } }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                     >
                         <Trash2 size={14} />
                     </button>
-                    <div className="w-px h-3 bg-slate-800 mx-1" />
+                    <div className="w-px h-3 mx-1" style={{ background: "rgba(255,255,255,0.1)" }} />
                     <button
                         onClick={onRefresh}
                         title="Sincronizar"
-                        className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-sky-400 transition-colors"
+                        className="p-1 rounded-lg transition-colors"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#0a84ff"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                     </button>
@@ -113,19 +136,24 @@ const FilePane: React.FC<PaneProps> = ({
             </div>
 
             {/* Breadcrumb */}
-            <div className="flex items-center gap-1 px-2 py-1 border-b border-slate-800 overflow-x-auto scrollbar-none shrink-0">
+            <div
+                className="flex items-center gap-1 px-2 py-1 overflow-x-auto scrollbar-none shrink-0"
+                style={{ borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}
+            >
                 <button
                     onClick={() => onNavigate('/')}
-                    className="text-xs text-sky-400 hover:text-sky-200 font-mono shrink-0"
+                    className="text-xs font-mono shrink-0 transition-colors"
+                    style={{ color: "#0a84ff" }}
                 >/</button>
                 {segments.map((seg, i) => {
                     const path = '/' + segments.slice(0, i + 1).join('/');
                     return (
                         <React.Fragment key={path}>
-                            <span className="text-slate-700 shrink-0 text-xs">/</span>
+                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
                             <button
                                 onClick={() => onNavigate(path)}
-                                className="text-xs text-sky-400 hover:text-sky-200 font-mono shrink-0 max-w-[80px] truncate"
+                                className="text-xs font-mono shrink-0 max-w-[80px] truncate transition-colors"
+                                style={{ color: "#0a84ff" }}
                             >{seg}</button>
                         </React.Fragment>
                     );
@@ -135,16 +163,19 @@ const FilePane: React.FC<PaneProps> = ({
             {/* File list */}
             <div className="flex-1 overflow-y-auto text-xs">
                 {loading && (
-                    <div className="flex items-center justify-center h-20 text-slate-500 animate-pulse text-xs">Carregando...</div>
+                    <div className="flex items-center justify-center h-20 text-xs animate-pulse" style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</div>
                 )}
                 {error && (
-                    <div className="p-3 text-red-400 text-xs">⚠ {error}</div>
+                    <div className="p-3 text-xs" style={{ color: "#ff453a" }}>⚠ {error}</div>
                 )}
 
                 {/* ".." parent entry */}
                 {!loading && cwd !== '/' && (
                     <div
-                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-900 cursor-pointer text-slate-400"
+                        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors"
+                        style={{ color: "rgba(255,255,255,0.4)" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
                         onDoubleClick={() => onNavigate(parent)}
                     >
                         <span>📂</span>
@@ -157,8 +188,13 @@ const FilePane: React.FC<PaneProps> = ({
                     return (
                         <div
                             key={entry.path}
-                            className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none transition-colors group ${isSelected ? 'bg-sky-900/40 text-white' : 'hover:bg-slate-900 text-slate-300'
-                                }`}
+                            className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none transition-colors"
+                            style={{
+                                background: isSelected ? "rgba(10,132,255,0.2)" : "transparent",
+                                color: isSelected ? "#ffffff" : "rgba(255,255,255,0.75)",
+                            }}
+                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
                             onClick={() => onSelect(entry.path)}
                             onDoubleClick={() => entry.is_dir && onNavigate(entry.path)}
                             draggable
@@ -167,20 +203,27 @@ const FilePane: React.FC<PaneProps> = ({
                             <span className="shrink-0">{entry.is_dir ? '📂' : '📄'}</span>
                             <span className="flex-1 font-mono truncate">{entry.name}</span>
                             {!entry.is_dir && (
-                                <span className="text-slate-600 shrink-0">{fmt(entry.size)}</span>
+                                <span className="shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>{fmt(entry.size)}</span>
                             )}
                         </div>
                     );
                 })}
 
                 {!loading && !error && entries.length === 0 && (
-                    <div className="flex items-center justify-center h-20 text-slate-600 text-xs">Pasta vazia</div>
+                    <div className="flex items-center justify-center h-20 text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>Pasta vazia</div>
                 )}
             </div>
 
             {/* Drop hint */}
             {dropTarget && (
-                <div className="px-3 py-2 text-xs text-sky-400 text-center bg-sky-950/40 border-t border-sky-800 animate-pulse shrink-0">
+                <div
+                    className="px-3 py-2 text-xs text-center animate-pulse shrink-0"
+                    style={{
+                        color: "#0a84ff",
+                        background: "rgba(10,132,255,0.08)",
+                        borderTop: "0.5px solid rgba(10,132,255,0.3)",
+                    }}
+                >
                     ↓ Solte aqui para {side === 'local' ? 'fazer download' : 'fazer upload'}
                 </div>
             )}
@@ -504,12 +547,24 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
 
     if (connState === 'prompt' || connState === 'error') {
         return (
-            <div className="flex-1 flex items-center justify-center bg-[#0f172a]">
-                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-96 shadow-2xl">
-                    <h3 className="text-lg font-semibold mb-1">Autenticação SFTP</h3>
-                    <p className="text-sm text-slate-400 font-mono mb-5">{server.username}@{server.host}:{server.port}</p>
-                    {connState === 'error' && <p className="text-xs text-red-400 mb-3">{connError}</p>}
-                    <label className="block text-xs text-slate-500 mb-1">Senha</label>
+            <div className="flex-1 flex items-center justify-center" style={{ background: "#000000" }}>
+                <div
+                    className="rounded-3xl p-8 w-96 shadow-2xl"
+                    style={{
+                        background: "rgba(28,28,30,0.88)",
+                        backdropFilter: "blur(40px) saturate(180%)",
+                        WebkitBackdropFilter: "blur(40px) saturate(180%)",
+                        border: "0.5px solid rgba(255,255,255,0.12)",
+                    }}
+                >
+                    <h3 className="text-base font-semibold mb-1">Autenticação SFTP</h3>
+                    <p className="text-xs font-mono mb-5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                        {server.username}@{server.host}:{server.port}
+                    </p>
+                    {connState === 'error' && (
+                        <p className="text-xs mb-3" style={{ color: "#ff453a" }}>{connError}</p>
+                    )}
+                    <label className="block text-[11px] font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.45)" }}>Senha</label>
                     <input
                         ref={pwInputRef}
                         type="password"
@@ -517,13 +572,27 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && doConnect(password)}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500 mb-4"
+                        className="w-full rounded-xl px-3 py-2.5 text-sm mb-5 transition-all focus:outline-none"
+                        style={{
+                            background: "rgba(255,255,255,0.07)",
+                            border: "0.5px solid rgba(255,255,255,0.1)",
+                            color: "rgba(255,255,255,0.9)",
+                        }}
+                        onFocus={e => {
+                            e.currentTarget.style.border = "0.5px solid #0a84ff";
+                            e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)";
+                        }}
+                        onBlur={e => {
+                            e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)";
+                            e.currentTarget.style.boxShadow = "none";
+                        }}
                         placeholder="senha SSH"
                     />
                     <button
                         onClick={() => doConnect(password)}
                         disabled={!password}
-                        className="w-full py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 rounded-xl text-sm font-medium transition-colors"
+                        className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-40"
+                        style={{ background: "#0a84ff", color: "#ffffff" }}
                     >Conectar</button>
                 </div>
             </div>
@@ -532,18 +601,18 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
 
     if (connState === 'connecting') {
         return (
-            <div className="flex-1 flex items-center justify-center bg-[#0f172a] text-slate-500 animate-pulse">
+            <div className="flex-1 flex items-center justify-center text-xs animate-pulse" style={{ background: "#000000", color: "rgba(255,255,255,0.35)" }}>
                 Conectando SFTP...
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col h-full w-full overflow-hidden bg-slate-950">
+        <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "#000000" }}>
             {/* Dual pane — 50/50 split */}
-            <div className="flex flex-1 overflow-hidden divide-x divide-slate-800">
+            <div className="flex flex-1 overflow-hidden" style={{ borderRight: "0.5px solid rgba(255,255,255,0.06)" }}>
                 {/* Local pane */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0" style={{ borderRight: "0.5px solid rgba(255,255,255,0.06)" }}>
                     <FilePane
                         title="Local"
                         icon="🖥"
@@ -567,7 +636,10 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 </div>
 
                 {/* Transfer buttons (center strip) */}
-                <div className="flex flex-col items-center justify-center gap-2 px-1 bg-slate-900 shrink-0">
+                <div
+                    className="flex flex-col items-center justify-center gap-2 px-1 shrink-0"
+                    style={{ background: "rgba(28,28,30,0.6)" }}
+                >
                     <button
                         title="Upload → (local para remoto)"
                         disabled={!localSelected || localEntries.find(e => e.path === localSelected)?.is_dir}
@@ -578,7 +650,10 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                             try { await sftpUpload(sftp, localSelected, remotePath); await listRemote(remoteCwd); }
                             catch (e) { setRemoteError(`Upload falhou: ${String(e)}`); }
                         }}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-sky-700 disabled:opacity-30 transition-colors text-sm"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg transition-all disabled:opacity-30 text-sm"
+                        style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}
+                        onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#0a84ff"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
                     >→</button>
                     <button
                         title="Download ← (remoto para local)"
@@ -590,12 +665,15 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                             try { await sftpDownload(sftp, remoteSelected, localPath); await listLocal(localCwd); }
                             catch (e) { setLocalError(`Download falhou: ${String(e)}`); }
                         }}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-sky-700 disabled:opacity-30 transition-colors text-sm"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg transition-all disabled:opacity-30 text-sm"
+                        style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}
+                        onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#0a84ff"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
                     >←</button>
                 </div>
 
                 {/* Remote pane */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0" style={{ borderLeft: "0.5px solid rgba(255,255,255,0.06)" }}>
                     <FilePane
                         title={`Remoto — ${server.host}`}
                         icon="🌐"
@@ -621,16 +699,30 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
 
             {/* Bottom Progress Bar */}
             {progress && (
-                <div className="h-8 bg-slate-900 border-t border-slate-800 flex items-center px-4 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] z-10">
+                <div
+                    className="h-8 flex items-center px-4 shrink-0 z-10"
+                    style={{
+                        background: "rgba(28,28,30,0.88)",
+                        backdropFilter: "blur(20px)",
+                        borderTop: "0.5px solid rgba(255,255,255,0.08)",
+                    }}
+                >
                     <div className="flex items-center w-full max-w-2xl mx-auto gap-4">
-                        <span className="text-xs text-slate-400 truncate w-64">{progress.file}</span>
-                        <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+                        <span className="text-xs truncate w-64" style={{ color: "rgba(255,255,255,0.5)" }}>{progress.file}</span>
+                        <div
+                            className="flex-1 h-1.5 rounded-full overflow-hidden"
+                            style={{ background: "rgba(255,255,255,0.08)" }}
+                        >
                             <div
-                                className="h-full bg-gradient-to-r from-sky-500 to-cyan-400 transition-all duration-300 ease-out shadow-[0_0_8px_rgba(56,189,248,0.5)]"
-                                style={{ width: `${(progress.bytes_done / Math.max(1, progress.bytes_total)) * 100}%` }}
+                                className="h-full transition-all duration-300 ease-out rounded-full"
+                                style={{
+                                    width: `${(progress.bytes_done / Math.max(1, progress.bytes_total)) * 100}%`,
+                                    background: "linear-gradient(90deg, #0a84ff, #64d2ff)",
+                                    boxShadow: "0 0 8px rgba(10,132,255,0.5)",
+                                }}
                             />
                         </div>
-                        <span className="text-xs font-mono text-slate-300 w-12 text-right">
+                        <span className="text-xs font-mono w-12 text-right" style={{ color: "rgba(255,255,255,0.7)" }}>
                             {Math.round((progress.bytes_done / Math.max(1, progress.bytes_total)) * 100)}%
                         </span>
                     </div>
@@ -642,15 +734,15 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 onClose={() => setModal(prev => ({ ...prev, isOpen: false }))}
                 title={modal.type === 'rename' ? 'Renomear' : modal.type === 'delete' ? 'Deletar' : 'Nova Pasta'}
                 icon={
-                    modal.type === 'rename' ? <Pencil size={18} className="text-sky-400" /> :
-                        modal.type === 'delete' ? <Trash2 size={18} className="text-red-400" /> :
-                            <FolderPlus size={18} className="text-sky-400" />
+                    modal.type === 'rename' ? <Pencil size={18} style={{ color: "#0a84ff" }} /> :
+                        modal.type === 'delete' ? <Trash2 size={18} style={{ color: "#ff453a" }} /> :
+                            <FolderPlus size={18} style={{ color: "#0a84ff" }} />
                 }
                 width="w-[400px]"
             >
                 <div className="flex flex-col">
                     {modal.description && (
-                        <p className="text-sm text-slate-400 mb-5">{modal.description}</p>
+                        <p className="text-sm mb-5" style={{ color: "rgba(255,255,255,0.5)" }}>{modal.description}</p>
                     )}
 
                     {(modal.type === 'rename' || modal.type === 'mkdir') && (
@@ -659,7 +751,20 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                             value={modal.inputValue}
                             onChange={(e) => setModal(prev => ({ ...prev, inputValue: e.target.value }))}
                             onKeyDown={(e) => e.key === 'Enter' && handleConfirmModal(modal.inputValue)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500/40 mb-6 transition-all"
+                            className="w-full rounded-xl px-4 py-2.5 text-sm mb-6 transition-all focus:outline-none"
+                            style={{
+                                background: "rgba(255,255,255,0.07)",
+                                border: "0.5px solid rgba(255,255,255,0.1)",
+                                color: "rgba(255,255,255,0.9)",
+                            }}
+                            onFocus={e => {
+                                e.currentTarget.style.border = "0.5px solid #0a84ff";
+                                e.currentTarget.style.boxShadow = "0 0 0 3px rgba(10,132,255,0.15)";
+                            }}
+                            onBlur={e => {
+                                e.currentTarget.style.border = "0.5px solid rgba(255,255,255,0.1)";
+                                e.currentTarget.style.boxShadow = "none";
+                            }}
                             placeholder={modal.type === 'mkdir' ? 'Nome da pasta' : 'Novo nome'}
                         />
                     )}
@@ -667,14 +772,20 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                     <div className="flex items-center justify-end gap-3">
                         <button
                             onClick={() => setModal(prev => ({ ...prev, isOpen: false }))}
-                            className="px-4 py-2 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                            className="px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-[0.98]"
+                            style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.75)" }}
                         >
                             Cancelar
                         </button>
                         <button
                             onClick={() => handleConfirmModal(modal.inputValue)}
-                            className={`px-6 py-2 rounded-xl text-sm font-medium text-white transition-all shadow-lg active:scale-95 ${modal.type === 'delete' ? 'bg-red-600 hover:bg-red-500 shadow-red-900/20' : 'bg-sky-600 hover:bg-sky-500 shadow-sky-900/20'
-                                }`}
+                            className="px-6 py-2 rounded-xl text-sm font-medium text-white transition-all active:scale-[0.98]"
+                            style={{
+                                background: modal.type === 'delete' ? '#ff453a' : '#0a84ff',
+                                boxShadow: modal.type === 'delete'
+                                    ? '0 4px 12px rgba(255,69,58,0.3)'
+                                    : '0 4px 12px rgba(10,132,255,0.3)',
+                            }}
                         >
                             {modal.type === 'delete' ? 'Deletar' : modal.type === 'rename' ? 'Salvar' : 'Criar'}
                         </button>

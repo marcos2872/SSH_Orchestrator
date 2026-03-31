@@ -48,15 +48,15 @@ const SyncStatus: React.FC<Props> = ({
   const getIcon = () => {
     switch (state) {
       case "syncing":
-        return <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />;
+        return <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ color: "#0a84ff" }} />;
       case "success":
-        return <CheckCircle2 className="w-4 h-4 text-green-400" />;
+        return <CheckCircle2 className="w-3.5 h-3.5" style={{ color: "#32d74b" }} />;
       case "error":
       case "offline":
-        return <CloudOff className="w-4 h-4 text-red-400" />;
+        return <CloudOff className="w-3.5 h-3.5" style={{ color: "#ff453a" }} />;
       case "idle":
       default:
-        return <Cloud className="w-4 h-4 text-slate-400" />;
+        return <Cloud className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.4)" }} />;
     }
   };
 
@@ -86,7 +86,14 @@ const SyncStatus: React.FC<Props> = ({
       <button
         onClick={() => setDropdownOpen((o) => !o)}
         disabled={state === "syncing" || state === "offline"}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors border border-slate-700 font-medium text-xs text-slate-300 disabled:opacity-50"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all text-xs font-medium disabled:opacity-50"
+        style={{
+          background: "rgba(255,255,255,0.06)",
+          border: "0.5px solid rgba(255,255,255,0.1)",
+          color: "rgba(255,255,255,0.7)",
+        }}
+        onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "rgba(255,255,255,0.09)"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
         title={
           lastSyncTime
             ? `Última sincronização: ${lastSyncTime.toLocaleTimeString()}`
@@ -104,7 +111,8 @@ const SyncStatus: React.FC<Props> = ({
             stroke="currentColor"
             strokeWidth="1.5"
             strokeLinecap="round"
-            className={`transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+            className={`transition-transform`}
+            style={{ opacity: 0.5, transform: dropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }}
           >
             <polyline points="1,1 5,5 9,1" />
           </svg>
@@ -112,9 +120,23 @@ const SyncStatus: React.FC<Props> = ({
       </button>
 
       {dropdownOpen && state !== "syncing" && state !== "offline" && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-          <div className="p-2 border-b border-slate-700/50 flex flex-col gap-1">
-            <span className="text-xs font-semibold text-slate-400 px-2 py-1 uppercase tracking-wider">
+        <div
+          className="absolute right-0 top-full mt-2 w-56 rounded-2xl shadow-2xl overflow-hidden z-50"
+          style={{
+            background: "rgba(44,44,46,0.92)",
+            backdropFilter: "blur(20px) saturate(180%)",
+            WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            border: "0.5px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          <div
+            className="p-2 flex flex-col gap-1"
+            style={{ borderBottom: "0.5px solid rgba(255,255,255,0.08)" }}
+          >
+            <span
+              className="text-[11px] font-medium px-2 py-1"
+              style={{ color: "rgba(255,255,255,0.35)" }}
+            >
               Ações Manuais
             </span>
           </div>
@@ -124,14 +146,17 @@ const SyncStatus: React.FC<Props> = ({
               setDropdownOpen(false);
               if (onPull) onPull();
             }}
-            className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-slate-700/50 transition-colors text-slate-300 hover:text-white"
+            className="w-full flex items-start gap-3 px-3 py-3 text-left transition-colors"
+            style={{ color: "rgba(255,255,255,0.75)" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#ffffff"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}
           >
-            <Download className="w-4 h-4 mt-0.5 text-blue-400" />
+            <Download className="w-4 h-4 mt-0.5" style={{ color: "#0a84ff" }} />
             <div>
               <span className="block text-sm font-medium">
                 Baixar do GitHub
               </span>
-              <span className="block text-xs text-slate-500 mt-0.5">
+              <span className="block text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
                 Sobrescreve alterações locais com a Nuvem
               </span>
             </div>
@@ -142,12 +167,18 @@ const SyncStatus: React.FC<Props> = ({
               setDropdownOpen(false);
               setShowPushConfirm(true);
             }}
-            className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-slate-700/50 transition-colors border-t border-slate-700/50 text-slate-300 hover:text-white"
+            className="w-full flex items-start gap-3 px-3 py-3 text-left transition-colors"
+            style={{
+              color: "rgba(255,255,255,0.75)",
+              borderTop: "0.5px solid rgba(255,255,255,0.06)",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#ffffff"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}
           >
-            <Upload className="w-4 h-4 mt-0.5 text-orange-400" />
+            <Upload className="w-4 h-4 mt-0.5" style={{ color: "#ff9f0a" }} />
             <div>
               <span className="block text-sm font-medium">Forçar Envio</span>
-              <span className="block text-xs text-slate-500 mt-0.5">
+              <span className="block text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
                 Envia o local exato ignorando a nuvem
               </span>
             </div>
@@ -159,10 +190,10 @@ const SyncStatus: React.FC<Props> = ({
         isOpen={showPushConfirm}
         onClose={() => setShowPushConfirm(false)}
         title="Atenção"
-        icon={<AlertTriangle className="w-5 h-5 text-orange-400" />}
+        icon={<AlertTriangle className="w-5 h-5" style={{ color: "#ff9f0a" }} />}
       >
         <div className="mb-6">
-          <p className="text-sm text-slate-300">
+          <p className="text-sm" style={{ color: "rgba(255,255,255,0.65)" }}>
             Fazer PUSH irá{" "}
             <strong className="text-white">
               forçar o estado do seu PC atual
@@ -174,13 +205,18 @@ const SyncStatus: React.FC<Props> = ({
         <div className="flex gap-3">
           <button
             onClick={() => setShowPushConfirm(false)}
-            className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white rounded-lg transition-colors"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all active:scale-[0.98]"
+            style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.8)" }}
           >
             Cancelar
           </button>
           <button
             onClick={confirmPush}
-            className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-sm font-semibold text-white rounded-lg transition-colors"
+            className="flex-1 py-2.5 text-sm font-semibold text-white rounded-xl transition-all active:scale-[0.98]"
+            style={{
+              background: "#ff9f0a",
+              boxShadow: "0 4px 12px rgba(255,159,10,0.3)",
+            }}
           >
             Forçar Envio
           </button>
