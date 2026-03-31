@@ -26,6 +26,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Set window icon explicitly (required on Linux for runtime icon in taskbar/titlebar)
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_icon(tauri::include_image!("icons/icon.png")).ok();
+            }
+
             let handle = app.handle();
             tauri::async_runtime::block_on(async move {
                 let app_dir = handle
