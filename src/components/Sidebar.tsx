@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { isVaultConfigured, isVaultLocked } from "../lib/api/vault";
 import {
   Workspace,
   getWorkspaces,
@@ -24,6 +24,7 @@ import {
   LogOut,
   Loader2,
   ExternalLink,
+  Lock,
 } from "lucide-react";
 import { useToast } from "../hooks/useToast";
 import { useAuth } from "../hooks/useAuth";
@@ -32,6 +33,8 @@ import Modal from "./Modal";
 interface Props {
   onSelectWorkspace: (ws: Workspace | null) => void;
   selectedId?: string;
+  /** Quando true, o sidebar colapsa automaticamente e bloqueia troca de workspace */
+  hasTabs?: boolean;
 }
 
 const COLORS = [
@@ -45,7 +48,7 @@ const COLORS = [
   "#30d158",
 ];
 
-const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
+const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId, hasTabs }) => {
   const toast = useToast();
   const { user, isLoading: authLoading, login, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -80,13 +83,18 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
     }
   }, [editingId]);
 
+  // Auto-colapsa quando uma conexão/aba é aberta
+  useEffect(() => {
+    if (hasTabs) setCollapsed(true);
+  }, [hasTabs]);
+
   // Fetch vault status when settings modal opens
   useEffect(() => {
     if (!showSettings) return;
     setVaultLoading(true);
     Promise.all([
-      invoke<boolean>("is_vault_configured"),
-      invoke<boolean>("is_vault_locked"),
+      isVaultConfigured(),
+      isVaultLocked(),
     ])
       .then(([configured, locked]) => {
         setVaultConfigured(configured);
@@ -241,14 +249,18 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
             {workspaces.map((ws) => (
               <button
                 key={ws.id}
-                title={ws.name}
+                title={hasTabs ? `${ws.name} — feche as conexões ativas para trocar de workspace` : ws.name}
                 onClick={() => {
+                  if (hasTabs) {
+                    toast.info("Feche as conexões ativas para trocar de workspace.");
+                    return;
+                  }
                   onSelectWorkspace(ws);
                   setCollapsed(false);
                 }}
                 className={`
                   w-8 h-8 rounded-xl flex items-center justify-center transition-all
-                  ${selectedId === ws.id ? "ring-2 ring-white/25 scale-110" : "hover:scale-110"}
+                  ${hasTabs ? "opacity-40 cursor-not-allowed" : selectedId === ws.id ? "ring-2 ring-white/25 scale-110" : "hover:scale-110"}
                 `}
                 style={{
                   backgroundColor: ws.color + "25",
@@ -264,17 +276,19 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
               </button>
             ))}
 
-            {/* New workspace (collapsed) */}
-            <button
-              onClick={handleCreateWorkspace}
-              title="Novo Workspace"
-              className="p-2 rounded-lg transition-colors mt-auto mb-3"
-              style={{ color: "rgba(255,255,255,0.3)" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            {/* New workspace (collapsed) — oculto quando há conexões ativas */}
+            {!hasTabs && (
+              <button
+                onClick={handleCreateWorkspace}
+                title="Novo Workspace"
+                className="p-2 rounded-lg transition-colors mt-auto mb-3"
+                style={{ color: "rgba(255,255,255,0.3)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
 
@@ -283,8 +297,14 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
           <>
             <nav className="flex-1 overflow-y-auto space-y-0.5 p-3">
               <div className="flex items-center justify-between mb-3 px-2">
-                <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
+                <span className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
                   Workspaces
+                  {hasTabs && (
+                    <Lock
+                      className="w-2.5 h-2.5"
+                      style={{ color: "rgba(235,235,245,0.3)" }}
+                    />
+                  )}
                 </span>
                 <button
                   onClick={handleCreateWorkspace}
@@ -350,16 +370,26 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
                   ) : (
                     <div
                       onClick={() => {
+                        if (hasTabs) {
+                          toast.info("Feche as conexões ativas para trocar de workspace.");
+                          return;
+                        }
                         setMenuOpenId(null);
                         onSelectWorkspace(ws);
                       }}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all"
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl transition-all"
                       style={{
+                        cursor: hasTabs ? "not-allowed" : "pointer",
                         background: selectedId === ws.id ? "rgba(255,255,255,0.1)" : "transparent",
-                        color: selectedId === ws.id ? "white" : "rgba(255,255,255,0.7)",
+                        color: hasTabs
+                          ? "rgba(255,255,255,0.3)"
+                          : selectedId === ws.id
+                          ? "white"
+                          : "rgba(255,255,255,0.7)",
                       }}
                       onMouseEnter={e => {
-                        if (selectedId !== ws.id) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.06)";
+                        if (hasTabs || selectedId === ws.id) return;
+                        (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.06)";
                       }}
                       onMouseLeave={e => {
                         if (selectedId !== ws.id) (e.currentTarget as HTMLDivElement).style.background = "transparent";
@@ -450,6 +480,15 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
             </div>
           </>
         )}
+      {/* Backdrop para fechar o menu de contexto do workspace.
+           Deve ficar DENTRO do mesmo <div> que tem backdropFilter para garantir
+           que o dropdown (z-50) vença o backdrop (z-40) no mesmo stacking context. */}
+      {menuOpenId && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setMenuOpenId(null)}
+        />
+      )}
       </div>
 
       {/* Settings modal */}
@@ -687,12 +726,6 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId }) => {
         </div>
       </Modal>
 
-      {menuOpenId && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setMenuOpenId(null)}
-        />
-      )}
     </>
   );
 };

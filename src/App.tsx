@@ -150,6 +150,7 @@ const App: React.FC = () => {
             <Sidebar
               onSelectWorkspace={handleSelectWorkspace}
               selectedId={selectedWorkspace?.id}
+              hasTabs={hasTabs}
             />
             <main className="flex-1 flex overflow-hidden relative">
               {/* ── Main content area ── */}
