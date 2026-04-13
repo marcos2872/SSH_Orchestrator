@@ -235,11 +235,12 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId, hasTabs }) =>
           <div className="flex flex-col items-center gap-2 pt-3 flex-1 overflow-y-auto">
             {/* Expand button */}
             <button
-              onClick={() => setCollapsed(false)}
-              title="Expandir sidebar"
-              className="p-2 rounded-lg transition-colors mb-1"
+              onClick={() => { if (hasTabs) return; setCollapsed(false); }}
+              title={hasTabs ? "Feche as conexões ativas para expandir" : "Expandir sidebar"}
+              disabled={hasTabs}
+              className={`p-2 rounded-lg transition-colors mb-1 ${hasTabs ? 'opacity-40 cursor-not-allowed' : ''}`}
               style={{ color: "rgba(255,255,255,0.4)" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+              onMouseEnter={e => { if (!hasTabs) e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
               <ChevronRight className="w-4 h-4" />
