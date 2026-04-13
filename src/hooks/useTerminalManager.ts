@@ -21,8 +21,6 @@ export interface Tab {
   sshSessionId: string | null;
 }
 
-let _tabCounter = 0;
-
 export function useTerminalManager() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -30,7 +28,7 @@ export function useTerminalManager() {
   const [splitMode, setSplitMode] = useState<SplitMode>("none");
 
   const openTab = useCallback((server: Server) => {
-    const id = `tab-${++_tabCounter}`;
+    const id = `tab-${crypto.randomUUID()}`;
     const newTab: Tab = { id, server, type: "terminal", sshSessionId: null };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
@@ -38,7 +36,7 @@ export function useTerminalManager() {
   }, []);
 
   const openSftpTab = useCallback((server: Server) => {
-    const id = `tab-${++_tabCounter}`;
+    const id = `tab-${crypto.randomUUID()}`;
     const newTab: Tab = { id, server, type: "sftp", sshSessionId: null };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
@@ -47,7 +45,7 @@ export function useTerminalManager() {
 
   /** Open a local terminal tab (no SSH — uses the system shell via PTY) */
   const openLocalTab = useCallback(() => {
-    const id = `tab-${++_tabCounter}`;
+    const id = `tab-${crypto.randomUUID()}`;
     const newTab: Tab = { id, server: null, type: "local", sshSessionId: null };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
@@ -87,7 +85,7 @@ export function useTerminalManager() {
   );
 
   const splitPane = useCallback((direction: SplitMode, server: Server) => {
-    const id = `tab-${++_tabCounter}`;
+    const id = `tab-${crypto.randomUUID()}`;
     const newTab: Tab = { id, server, type: "terminal", sshSessionId: null };
     setTabs((prev) => [...prev, newTab]);
     setSplitTabId(id);
@@ -96,7 +94,7 @@ export function useTerminalManager() {
 
   /** Split pane with a local terminal instead of SSH */
   const splitLocalPane = useCallback((direction: SplitMode) => {
-    const id = `tab-${++_tabCounter}`;
+    const id = `tab-${crypto.randomUUID()}`;
     const newTab: Tab = { id, server: null, type: "local", sshSessionId: null };
     setTabs((prev) => [...prev, newTab]);
     setSplitTabId(id);

@@ -87,7 +87,6 @@ const TitleBar: React.FC = () => {
       }, 3000);
       window.dispatchEvent(new Event("workspaces-updated"));
     } catch (e: any) {
-      console.error("Pull failed:", e);
       toast.error(`Falha ao baixar dados: ${e}`);
       setSyncState("error");
       setSyncDetail("");
@@ -107,7 +106,6 @@ const TitleBar: React.FC = () => {
       }, 3000);
       window.dispatchEvent(new Event("workspaces-updated"));
     } catch (e: any) {
-      console.error("Push failed:", e);
       toast.error(`Falha ao enviar dados: ${e}`);
       setSyncState("error");
       setSyncDetail("");

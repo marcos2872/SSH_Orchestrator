@@ -1,5 +1,13 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  isVaultConfigured,
+  isVaultLocked,
+  setupVault,
+  unlockVault,
+  checkSyncedVault,
+  importSyncedVault,
+  getVaultLastAccess,
+} from "../lib/api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Lock,
@@ -284,7 +292,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
   const [lastAccess, setLastAccess] = useState<string | null>(null);
   const [transitionKey, setTransitionKey] = useState(0);
 
-  const { error, success } = useToast() as any;
+  const { error, success } = useToast();
   const { login } = useAuth();
 
   const triggerShake = () => {
@@ -305,7 +313,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
 
   const fetchLastAccess = useCallback(async () => {
     try {
-      const ts = await invoke<string | null>("get_vault_last_access");
+      const ts = await getVaultLastAccess();
       setLastAccess(ts);
     } catch {
       setLastAccess(null);
@@ -319,9 +327,9 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
   const checkVaultState = async () => {
     setFlowState("loading");
     try {
-      const configured = await invoke<boolean>("is_vault_configured");
+      const configured = await isVaultConfigured();
       if (configured) {
-        const locked = await invoke<boolean>("is_vault_locked");
+        const locked = await isVaultLocked();
         if (locked) {
           setFlowState("unlock");
           fetchLastAccess();
@@ -333,7 +341,6 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
         setFlowState("welcome");
       }
     } catch (err) {
-      console.error("Failed to check vault state:", err);
       if (error) error("Falha ao conectar com o serviço de segurança.");
       setFlowState("welcome");
     }
@@ -344,7 +351,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setInlineError("");
     try {
       await login();
-      const hasSyncedVault = await invoke<boolean>("check_synced_vault");
+      const hasSyncedVault = await checkSyncedVault();
       if (hasSyncedVault) {
         if (success) success("Cofre sincronizado encontrado!");
         navigateTo("unlock_synced");
@@ -374,7 +381,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     }
     setSubmitting(true);
     try {
-      await invoke("setup_vault", { password });
+      await setupVault(password);
       if (success) success("Vault configurado com sucesso!");
       await checkVaultState();
       window.dispatchEvent(new Event("vault-unlocked"));
@@ -391,7 +398,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setInlineError("");
     setSubmitting(true);
     try {
-      await invoke("unlock_vault", { password });
+      await unlockVault(password);
       if (success) success("Vault destrancado com sucesso!");
       await checkVaultState();
       window.dispatchEvent(new Event("vault-unlocked"));
@@ -409,7 +416,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setInlineError("");
     setSubmitting(true);
     try {
-      await invoke("import_synced_vault", { password });
+      await importSyncedVault(password);
       if (success) success("Cofre sincronizado recuperado com sucesso!");
       await checkVaultState();
       window.dispatchEvent(new Event("vault-unlocked"));
@@ -436,8 +443,8 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
   const [isFullyUnlocked, setIsFullyUnlocked] = useState(false);
 
   useEffect(() => {
-    invoke<boolean>("is_vault_configured").then((c) => {
-      if (c) invoke<boolean>("is_vault_locked").then((l) => setIsFullyUnlocked(!l));
+    isVaultConfigured().then((c) => {
+      if (c) isVaultLocked().then((l) => setIsFullyUnlocked(!l));
     });
     const handler = () => setIsFullyUnlocked(true);
     window.addEventListener("vault-unlocked", handler);

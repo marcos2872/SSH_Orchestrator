@@ -19,11 +19,11 @@ import AddServerModal from "../Servers/AddServerModal";
 import Modal from "../Modal";
 
 interface Props {
-  workspace: { id: string; name: string; color: string };
+  workspace: { id: string; name: string; color: string; sync_enabled?: boolean };
   onConnect: (server: Server) => void;
   onSftp: (server: Server) => void;
   onOpenLocal: () => void;
-  onWorkspaceUpdated: (ws: { id: string; name: string; color: string }) => void;
+  onWorkspaceUpdated: (ws: { id: string; name: string; color: string; sync_enabled?: boolean }) => void;
   onWorkspaceDeleted: () => void;
 }
 
@@ -60,7 +60,7 @@ const WorkspaceDetail: React.FC<Props> = ({
   const [wsName, setWsName] = useState(workspace.name);
   const [wsColor, setWsColor] = useState(workspace.color);
   const [wsSyncEnabled, setWsSyncEnabled] = useState(
-    (workspace as any).sync_enabled || false,
+    workspace.sync_enabled ?? false,
   );
   const [savingWs, setSavingWs] = useState(false);
   const [confirmDeleteWs, setConfirmDeleteWs] = useState(false);
@@ -75,7 +75,7 @@ const WorkspaceDetail: React.FC<Props> = ({
   useEffect(() => {
     setWsName(workspace.name);
     setWsColor(workspace.color);
-    setWsSyncEnabled((workspace as any).sync_enabled || false);
+    setWsSyncEnabled(workspace.sync_enabled ?? false);
   }, [workspace]);
 
   const loadServers = async () => {
@@ -110,7 +110,7 @@ const WorkspaceDetail: React.FC<Props> = ({
         name: wsName,
         color: wsColor,
         sync_enabled: wsSyncEnabled,
-      } as any);
+      });
       window.dispatchEvent(new Event("workspaces-updated"));
       toast.success("Workspace atualizado!");
       setShowSettings(false);
