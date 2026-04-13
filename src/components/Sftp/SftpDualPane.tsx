@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Modal from '../Modal';
 import {
-    sftpDirectConnect, sftpListDir, sftpListLocal, sftpUpload, sftpDownload,
-    sftpCloseSession, sftpWorkdir, sftpHomeDir, onSftpProgress,
+    sftpDirectConnect, sftpListDir, sftpListLocal,
+    sftpCloseSession, sftpWorkdir, sftpHomeDir,
     sftpDelete, sftpRename, sftpMkdir,
     sftpDeleteLocal, sftpRenameLocal, sftpMkdirLocal,
-    type SftpEntry, type LocalEntry, type SftpProgress,
+    type SftpEntry, type LocalEntry,
 } from '../../lib/api/sftp';
+import { useSftpQueue } from '../../hooks/useSftpQueue';
+import TransferQueue from './TransferQueue';
 import type { Server } from '../../hooks/useTerminalManager';
 import { FolderPlus, Trash2, Pencil, RefreshCw } from 'lucide-react';
 
@@ -14,8 +16,8 @@ import { FolderPlus, Trash2, Pencil, RefreshCw } from 'lucide-react';
 
 interface DragItem {
     side: 'local' | 'remote';
-    path: string;
-    name: string;
+    paths: string[]; // one or more selected paths
+    name: string;    // display name (first item or "N itens")
     is_dir: boolean;
 }
 
@@ -44,26 +46,28 @@ interface PaneProps {
     error: string | null;
     side: 'local' | 'remote';
     dropTarget: boolean;
-    selected: string | null;
-    onSelect: (path: string) => void;
+    selected: Set<string>;
+    lastSelected: string | null;
+    onSelect: (path: string, e: React.MouseEvent) => void;
     onNavigate: (path: string) => void;
     onDragStart: (item: DragItem) => void;
     onDrop: (target: 'local' | 'remote', targetDir: string) => void;
     onDragOver: (e: React.DragEvent, side: 'local' | 'remote') => void;
     onRename: (path: string) => void;
-    onDelete: (path: string) => void;
+    onDelete: (paths: string[]) => void;
     onMkdir: () => void;
     onRefresh: () => void;
 }
 
 const FilePane: React.FC<PaneProps> = ({
     title, icon, cwd, entries, loading, error, side,
-    dropTarget, selected, onSelect, onNavigate,
+    dropTarget, selected, lastSelected: _lastSelected, onSelect, onNavigate,
     onDragStart, onDrop, onDragOver,
     onRename, onDelete, onMkdir, onRefresh,
 }) => {
     const parent = cwd.split('/').slice(0, -1).join('/') || '/';
     const segments = cwd.split('/').filter(Boolean);
+    const selCount = selected.size;
 
     return (
         <div
@@ -87,6 +91,14 @@ const FilePane: React.FC<PaneProps> = ({
                 <div className="flex items-center gap-2">
                     <span className="text-base">{icon}</span>
                     <span className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.75)" }}>{title}</span>
+                    {selCount > 1 && (
+                        <span
+                            className="text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+                            style={{ background: 'rgba(10,132,255,0.2)', color: '#0a84ff' }}
+                        >
+                            {selCount} selecionados
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-1">
                     <button
@@ -100,8 +112,8 @@ const FilePane: React.FC<PaneProps> = ({
                         <FolderPlus size={14} />
                     </button>
                     <button
-                        onClick={() => selected && onRename(selected)}
-                        disabled={!selected}
+                        onClick={() => selCount === 1 && onRename([...selected][0])}
+                        disabled={selCount !== 1}
                         title="Renomear"
                         className="p-1 rounded-lg transition-colors disabled:opacity-30"
                         style={{ color: "rgba(255,255,255,0.4)" }}
@@ -111,9 +123,9 @@ const FilePane: React.FC<PaneProps> = ({
                         <Pencil size={14} />
                     </button>
                     <button
-                        onClick={() => selected && onDelete(selected)}
-                        disabled={!selected}
-                        title="Deletar"
+                        onClick={() => selCount > 0 && onDelete([...selected])}
+                        disabled={selCount === 0}
+                        title={selCount > 1 ? `Deletar ${selCount} itens` : 'Deletar'}
                         className="p-1 rounded-lg transition-colors disabled:opacity-30"
                         style={{ color: "rgba(255,255,255,0.4)" }}
                         onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#ff453a"; } }}
@@ -183,8 +195,8 @@ const FilePane: React.FC<PaneProps> = ({
                     </div>
                 )}
 
-                {!loading && entries.map(entry => {
-                    const isSelected = selected === entry.path;
+                {!loading && entries.map((entry, idx) => {
+                    const isSelected = selected.has(entry.path);
                     return (
                         <div
                             key={entry.path}
@@ -195,10 +207,15 @@ const FilePane: React.FC<PaneProps> = ({
                             }}
                             onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
                             onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
-                            onClick={() => onSelect(entry.path)}
+                            onClick={e => onSelect(entry.path, e)}
                             onDoubleClick={() => entry.is_dir && onNavigate(entry.path)}
                             draggable
-                            onDragStart={() => onDragStart({ side, path: entry.path, name: entry.name, is_dir: entry.is_dir })}
+                            onDragStart={() => {
+                                const paths = isSelected ? [...selected] : [entry.path];
+                                const name = paths.length === 1 ? entry.name : `${paths.length} itens`;
+                                onDragStart({ side, paths, name, is_dir: entry.is_dir });
+                            }}
+                            data-index={idx}
                         >
                             <span className="shrink-0">{entry.is_dir ? '📂' : '📄'}</span>
                             <span className="flex-1 font-mono truncate">{entry.name}</span>
@@ -246,21 +263,28 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
     const [localEntries, setLocalEntries] = useState<LocalEntry[]>([]);
     const [localLoading, setLocalLoading] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
-    const [localSelected, setLocalSelected] = useState<string | null>(null);
+    const [localSelected, setLocalSelected] = useState<Set<string>>(new Set());
+    const [localLastSelected, setLocalLastSelected] = useState<string | null>(null);
 
     // Remote pane
     const [remoteCwd, setRemoteCwd] = useState('/');
     const [remoteEntries, setRemoteEntries] = useState<SftpEntry[]>([]);
     const [remoteLoading, setRemoteLoading] = useState(false);
     const [remoteError, setRemoteError] = useState<string | null>(null);
-    const [remoteSelected, setRemoteSelected] = useState<string | null>(null);
+    const [remoteSelected, setRemoteSelected] = useState<Set<string>>(new Set());
+    const [remoteLastSelected, setRemoteLastSelected] = useState<string | null>(null);
 
     // Drag & drop
     const [dragging, setDragging] = useState<DragItem | null>(null);
     const [dropSide, setDropSide] = useState<'local' | 'remote' | null>(null);
 
-    // Transfer status
-    const [progress, setProgress] = useState<SftpProgress | null>(null);
+    // Transfer queue
+    const onTransferDone = useCallback(() => {
+        listLocal(localCwd);
+        listRemote(remoteCwd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [localCwd, remoteCwd]);
+    const { queue, enqueue, cancelPending, clearDone } = useSftpQueue(sftp, onTransferDone);
 
     // Modal state
     interface ModalState {
@@ -268,6 +292,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         type: 'rename' | 'delete' | 'mkdir';
         side: 'local' | 'remote';
         targetPath?: string;
+        targetPaths?: string[];
         inputValue: string;
         description: string;
     }
@@ -381,20 +406,72 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         return () => { cancelConnectRef.current = true; };
     }, []);
 
-    // ── Subscribe to transfer progress + cleanup session on unmount ───────────
+    // ── Subscribe to progress + cleanup session on unmount ─────────────────────
     useEffect(() => {
         if (!sftp) return;
-        const unlisten = onSftpProgress(sftp, (p) => {
-            setProgress(p);
-            if (p.bytes_done === p.bytes_total) {
-                setTimeout(() => setProgress(null), 2000);
-            }
-        });
         return () => {
-            unlisten.then(f => f());
             sftpCloseSession(sftp);
         };
     }, [sftp]);
+
+    // ── Selection helpers ─────────────────────────────────────────
+    const makeSelectHandler = useCallback((
+        entries: Array<{ path: string }>,
+        setSelected: React.Dispatch<React.SetStateAction<Set<string>>>,
+        getLastSelected: () => string | null,
+        setLastSelected: React.Dispatch<React.SetStateAction<string | null>>,
+    ) => (path: string, e: React.MouseEvent) => {
+        const ctrl = e.ctrlKey || e.metaKey;
+        const shift = e.shiftKey;
+
+        if (shift) {
+            const last = getLastSelected();
+            if (last) {
+                const paths = entries.map(en => en.path);
+                const a = paths.indexOf(last);
+                const b = paths.indexOf(path);
+                const [from, to] = a < b ? [a, b] : [b, a];
+                const range = new Set(paths.slice(from, to + 1));
+                setSelected(range);
+            } else {
+                setSelected(new Set([path]));
+                setLastSelected(path);
+            }
+        } else if (ctrl) {
+            setSelected(prev => {
+                const next = new Set(prev);
+                if (next.has(path)) next.delete(path);
+                else next.add(path);
+                return next;
+            });
+            setLastSelected(path);
+        } else {
+            setSelected(new Set([path]));
+            setLastSelected(path);
+        }
+    }, []);
+
+    const handleLocalSelect = useCallback(
+        (path: string, e: React.MouseEvent) =>
+            makeSelectHandler(
+                localEntries,
+                setLocalSelected,
+                () => localLastSelected,
+                setLocalLastSelected,
+            )(path, e),
+        [makeSelectHandler, localEntries, localLastSelected],
+    );
+
+    const handleRemoteSelect = useCallback(
+        (path: string, e: React.MouseEvent) =>
+            makeSelectHandler(
+                remoteEntries,
+                setRemoteSelected,
+                () => remoteLastSelected,
+                setRemoteLastSelected,
+            )(path, e),
+        [makeSelectHandler, remoteEntries, remoteLastSelected],
+    );
 
     // ── Drag & Drop ──────────────────────────────────────────────────────────
     const handleDragStart = useCallback((item: DragItem) => {
@@ -408,30 +485,36 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
 
     const handleDrop = useCallback(async (targetSide: 'local' | 'remote', targetDir: string) => {
         setDropSide(null);
-        if (!dragging || dragging.side === targetSide || dragging.is_dir || !sftp) return;
+        if (!dragging || dragging.side === targetSide || !sftp) return;
 
         if (targetSide === 'remote') {
-            const remotePath = `${targetDir.replace(/\/$/, '')}/${dragging.name}`;
-            try {
-                await sftpUpload(sftp, dragging.path, remotePath);
-                await listRemote(remoteCwd);
-            } catch (e) {
-                setRemoteError(`Erro no upload: ${String(e)}`);
-            }
+            enqueue(dragging.paths.map(p => {
+                const name = p.split('/').pop() ?? p;
+                return {
+                    direction: 'upload' as const,
+                    name,
+                    srcPath: p,
+                    destPath: `${targetDir.replace(/\/$/, '')}/${name}`,
+                    isDir: dragging.is_dir,
+                };
+            }));
         } else {
-            const localPath = `${targetDir.replace(/\/$/, '')}/${dragging.name}`;
-            try {
-                await sftpDownload(sftp, dragging.path, localPath);
-                await listLocal(localCwd);
-            } catch (e) {
-                setLocalError(`Erro no download: ${String(e)}`);
-            }
+            enqueue(dragging.paths.map(p => {
+                const name = p.split('/').pop() ?? p;
+                return {
+                    direction: 'download' as const,
+                    name,
+                    srcPath: p,
+                    destPath: `${targetDir.replace(/\/$/, '')}/${name}`,
+                    isDir: dragging.is_dir,
+                };
+            }));
         }
         setDragging(null);
-    }, [dragging, sftp, remoteCwd, localCwd, listRemote, listLocal]);
+    }, [dragging, sftp, enqueue]);
 
     const handleConfirmModal = async (value: string) => {
-        const { type, side, targetPath } = modal;
+        const { type, side, targetPath, targetPaths } = modal;
         setModal(prev => ({ ...prev, isOpen: false }));
 
         try {
@@ -440,9 +523,10 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                     const parent = targetPath.split('/').slice(0, -1).join('/') || '/';
                     const newPath = `${parent.replace(/\/$/, '')}/${value}`;
                     await sftpRenameLocal(targetPath, newPath);
-                } else if (type === 'delete' && targetPath) {
-                    await sftpDeleteLocal(targetPath);
-                    setLocalSelected(null);
+                } else if (type === 'delete') {
+                    const paths = targetPaths ?? (targetPath ? [targetPath] : []);
+                    for (const p of paths) await sftpDeleteLocal(p);
+                    setLocalSelected(new Set());
                 } else if (type === 'mkdir') {
                     const path = `${localCwd.replace(/\/$/, '')}/${value}`;
                     await sftpMkdirLocal(path);
@@ -454,9 +538,10 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                     const parent = targetPath.split('/').slice(0, -1).join('/') || '/';
                     const newPath = `${parent.replace(/\/$/, '')}/${value}`;
                     await sftpRename(sftp, targetPath, newPath);
-                } else if (type === 'delete' && targetPath) {
-                    await sftpDelete(sftp, targetPath);
-                    setRemoteSelected(null);
+                } else if (type === 'delete') {
+                    const paths = targetPaths ?? (targetPath ? [targetPath] : []);
+                    for (const p of paths) await sftpDelete(sftp, p);
+                    setRemoteSelected(new Set());
                 } else if (type === 'mkdir') {
                     const path = `${remoteCwd.replace(/\/$/, '')}/${value}`;
                     await sftpMkdir(sftp, path);
@@ -483,13 +568,16 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         });
     }, []);
 
-    const handleLocalDelete = useCallback((path: string) => {
-        const name = path.split('/').pop() || '';
+    const handleLocalDelete = useCallback((paths: string[]) => {
+        const name = paths.length === 1
+            ? (paths[0].split('/').pop() ?? paths[0])
+            : `${paths.length} itens`;
         setModal({
             isOpen: true,
             type: 'delete',
             side: 'local',
-            targetPath: path,
+            targetPath: paths[0],
+            targetPaths: paths,
             inputValue: '',
             description: `Tem certeza que deseja deletar "${name}"?`,
         });
@@ -519,13 +607,16 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
         });
     }, []);
 
-    const handleRemoteDelete = useCallback((path: string) => {
-        const name = path.split('/').pop() || '';
+    const handleRemoteDelete = useCallback((paths: string[]) => {
+        const name = paths.length === 1
+            ? (paths[0].split('/').pop() ?? paths[0])
+            : `${paths.length} itens`;
         setModal({
             isOpen: true,
             type: 'delete',
             side: 'remote',
-            targetPath: path,
+            targetPath: paths[0],
+            targetPaths: paths,
             inputValue: '',
             description: `Tem certeza que deseja deletar "${name}"?`,
         });
@@ -623,8 +714,9 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                         error={localError}
                         dropTarget={dropSide === 'local'}
                         selected={localSelected}
-                        onSelect={setLocalSelected}
-                        onNavigate={listLocal}
+                        lastSelected={localLastSelected}
+                        onSelect={handleLocalSelect}
+                        onNavigate={path => { listLocal(path); setLocalSelected(new Set()); }}
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
@@ -642,13 +734,20 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 >
                     <button
                         title="Upload → (local para remoto)"
-                        disabled={!localSelected || localEntries.find(e => e.path === localSelected)?.is_dir}
-                        onClick={async () => {
-                            if (!localSelected || !sftp) return;
-                            const name = localSelected.split('/').pop()!;
-                            const remotePath = `${remoteCwd.replace(/\/$/, '')}/${name}`;
-                            try { await sftpUpload(sftp, localSelected, remotePath); await listRemote(remoteCwd); }
-                            catch (e) { setRemoteError(`Upload falhou: ${String(e)}`); }
+                        disabled={localSelected.size === 0}
+                        onClick={() => {
+                            if (!sftp) return;
+                            enqueue([...localSelected].map(p => {
+                                const entry = localEntries.find(e => e.path === p);
+                                const name = p.split('/').pop() ?? p;
+                                return {
+                                    direction: 'upload' as const,
+                                    name,
+                                    srcPath: p,
+                                    destPath: `${remoteCwd.replace(/\/$/, '')}/${name}`,
+                                    isDir: entry?.is_dir ?? false,
+                                };
+                            }));
                         }}
                         className="w-7 h-7 flex items-center justify-center rounded-lg transition-all disabled:opacity-30 text-sm"
                         style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}
@@ -657,13 +756,20 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                     >→</button>
                     <button
                         title="Download ← (remoto para local)"
-                        disabled={!remoteSelected || remoteEntries.find(e => e.path === remoteSelected)?.is_dir || progress !== null}
-                        onClick={async () => {
-                            if (!remoteSelected || !sftp) return;
-                            const name = remoteSelected.split('/').pop()!;
-                            const localPath = `${localCwd.replace(/\/$/, '')}/${name}`;
-                            try { await sftpDownload(sftp, remoteSelected, localPath); await listLocal(localCwd); }
-                            catch (e) { setLocalError(`Download falhou: ${String(e)}`); }
+                        disabled={remoteSelected.size === 0}
+                        onClick={() => {
+                            if (!sftp) return;
+                            enqueue([...remoteSelected].map(p => {
+                                const entry = remoteEntries.find(e => e.path === p);
+                                const name = p.split('/').pop() ?? p;
+                                return {
+                                    direction: 'download' as const,
+                                    name,
+                                    srcPath: p,
+                                    destPath: `${localCwd.replace(/\/$/, '')}/${name}`,
+                                    isDir: entry?.is_dir ?? false,
+                                };
+                            }));
                         }}
                         className="w-7 h-7 flex items-center justify-center rounded-lg transition-all disabled:opacity-30 text-sm"
                         style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)" }}
@@ -684,8 +790,9 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                         error={remoteError}
                         dropTarget={dropSide === 'remote'}
                         selected={remoteSelected}
-                        onSelect={setRemoteSelected}
-                        onNavigate={listRemote}
+                        lastSelected={remoteLastSelected}
+                        onSelect={handleRemoteSelect}
+                        onNavigate={path => { listRemote(path); setRemoteSelected(new Set()); }}
                         onDragStart={handleDragStart}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
@@ -697,37 +804,12 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 </div>
             </div>
 
-            {/* Bottom Progress Bar */}
-            {progress && (
-                <div
-                    className="h-8 flex items-center px-4 shrink-0 z-10"
-                    style={{
-                        background: "rgba(28,28,30,0.88)",
-                        backdropFilter: "blur(20px)",
-                        borderTop: "0.5px solid rgba(255,255,255,0.08)",
-                    }}
-                >
-                    <div className="flex items-center w-full max-w-2xl mx-auto gap-4">
-                        <span className="text-xs truncate w-64" style={{ color: "rgba(255,255,255,0.5)" }}>{progress.file}</span>
-                        <div
-                            className="flex-1 h-1.5 rounded-full overflow-hidden"
-                            style={{ background: "rgba(255,255,255,0.08)" }}
-                        >
-                            <div
-                                className="h-full transition-all duration-300 ease-out rounded-full"
-                                style={{
-                                    width: `${(progress.bytes_done / Math.max(1, progress.bytes_total)) * 100}%`,
-                                    background: "linear-gradient(90deg, #0a84ff, #64d2ff)",
-                                    boxShadow: "0 0 8px rgba(10,132,255,0.5)",
-                                }}
-                            />
-                        </div>
-                        <span className="text-xs font-mono w-12 text-right" style={{ color: "rgba(255,255,255,0.7)" }}>
-                            {Math.round((progress.bytes_done / Math.max(1, progress.bytes_total)) * 100)}%
-                        </span>
-                    </div>
-                </div>
-            )}
+            {/* Transfer Queue */}
+            <TransferQueue
+                queue={queue}
+                onCancel={cancelPending}
+                onClearDone={clearDone}
+            />
 
             <Modal
                 isOpen={modal.isOpen}

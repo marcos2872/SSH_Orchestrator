@@ -221,6 +221,38 @@ pub async fn sftp_mkdir(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state, app))]
+pub async fn sftp_upload_recursive(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    session_id: String,
+    local_path: String,
+    remote_path: String,
+) -> Result<(), String> {
+    state
+        .sftp
+        .upload_recursive(&session_id, &local_path, &remote_path, &app)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state, app))]
+pub async fn sftp_download_recursive(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    session_id: String,
+    remote_path: String,
+    local_path: String,
+) -> Result<(), String> {
+    state
+        .sftp
+        .download_recursive(&session_id, &remote_path, &local_path, &app)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 #[tracing::instrument(skip(state))]
 pub async fn sftp_close_session(
     state: State<'_, AppState>,

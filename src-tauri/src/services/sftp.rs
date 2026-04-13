@@ -3,6 +3,8 @@ use dashmap::DashMap;
 use russh::client::{self, Handle};
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use serde::Serialize;
+use std::path::Path;
+use std::pin::Pin;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -215,10 +217,10 @@ impl SftpService {
         Ok(result)
     }
 
-    /// Upload a local file to a remote path, emitting progress events.
-    /// Uses session.write() to upload the file in one call after reading it
-    /// locally, then emits a single completion progress event.
-    pub async fn upload(
+    /// Upload a single local file to a remote path, emitting progress events.
+    /// The DashMap guard is released before the I/O loop to avoid holding a
+    /// synchronous lock across async yield points.
+    async fn upload_file(
         &self,
         session_id: &str,
         local_path: &str,
@@ -227,20 +229,22 @@ impl SftpService {
     ) -> Result<()> {
         let mut local_file = tokio::fs::File::open(local_path).await?;
         let total = local_file.metadata().await?.len();
-        let file_name = std::path::Path::new(local_path)
+        let file_name = Path::new(local_path)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| remote_path.to_string());
 
-        let guard = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
-
+        // Open remote file while holding guard, then release guard before I/O loop.
         let flags = OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE;
-        let mut remote_file = guard.session.open_with_flags(remote_path, flags).await?;
+        let mut remote_file = {
+            let guard = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+            guard.session.open_with_flags(remote_path, flags).await?
+            // guard dropped here
+        };
 
-        // Emit 0% progress
         let progress_event = format!("sftp://progress/{}", session_id);
         let _ = app.emit(
             &progress_event,
@@ -252,9 +256,8 @@ impl SftpService {
             },
         );
 
-        let mut buffer = [0u8; 65536]; // 64KB buffer
-        let mut done = 0;
-
+        let mut buffer = [0u8; 65536];
+        let mut done = 0u64;
         loop {
             let n = local_file.read(&mut buffer).await?;
             if n == 0 {
@@ -262,7 +265,6 @@ impl SftpService {
             }
             remote_file.write_all(&buffer[..n]).await?;
             done += n as u64;
-
             let _ = app.emit(
                 &progress_event,
                 ProgressEvent {
@@ -273,12 +275,63 @@ impl SftpService {
                 },
             );
         }
-
         Ok(())
     }
 
-    /// Download a remote file to a local path, emitting progress events.
-    pub async fn download(
+    /// Upload a local file to a remote path (public, single-file).
+    pub async fn upload(
+        &self,
+        session_id: &str,
+        local_path: &str,
+        remote_path: &str,
+        app: &AppHandle,
+    ) -> Result<()> {
+        self.upload_file(session_id, local_path, remote_path, app)
+            .await
+    }
+
+    /// Upload a local file or directory recursively to a remote path.
+    /// For directories, creates the remote directory and recurses into children.
+    pub fn upload_recursive<'a>(
+        &'a self,
+        session_id: &'a str,
+        local_path: &'a str,
+        remote_path: &'a str,
+        app: &'a AppHandle,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            if Path::new(local_path).is_dir() {
+                // Create remote directory, ignore error if it already exists.
+                {
+                    let guard = self
+                        .sessions
+                        .get(session_id)
+                        .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+                    let _ = guard.session.create_dir(remote_path).await;
+                    // guard dropped
+                }
+                let read_dir = std::fs::read_dir(local_path)
+                    .map_err(|e| anyhow!("Erro ao listar '{}': {}", local_path, e))?;
+                for entry in read_dir {
+                    let entry = entry?;
+                    let child_local = entry.path().to_string_lossy().to_string();
+                    let child_name = entry.file_name().to_string_lossy().to_string();
+                    let child_remote =
+                        format!("{}/{}", remote_path.trim_end_matches('/'), child_name);
+                    self.upload_recursive(session_id, &child_local, &child_remote, app)
+                        .await?;
+                }
+            } else {
+                self.upload_file(session_id, local_path, remote_path, app)
+                    .await?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Download a single remote file to a local path, emitting progress events.
+    /// The DashMap guard is released before the I/O loop.
+    async fn download_file(
         &self,
         session_id: &str,
         remote_path: &str,
@@ -291,23 +344,21 @@ impl SftpService {
             .unwrap_or(remote_path)
             .to_string();
 
-        let guard = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
-
-        let mut remote_file = guard.session.open(remote_path).await?;
-        let metadata = remote_file.metadata().await?;
-        let total = metadata.size.unwrap_or(0);
-
-        // Drop guard early if possible but we need session for read
-        // However, russh-sftp File holds a reference to the session? No, it holds the channel.
-        // Actually, DashMap Ref prevents other writes to that segment.
-        // Let's copy session or just hold it. For now, hold it.
+        // Open remote file + stat while holding guard, then release.
+        let (mut remote_file, total) = {
+            let guard = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+            let mut f = guard.session.open(remote_path).await?;
+            let meta = f.metadata().await?;
+            let sz = meta.size.unwrap_or(0);
+            (f, sz)
+            // guard dropped here
+        };
 
         let mut local_file = tokio::fs::File::create(local_path).await?;
 
-        // Emit 0% progress
         let progress_event = format!("sftp://progress/{}", session_id);
         let _ = app.emit(
             &progress_event,
@@ -319,9 +370,8 @@ impl SftpService {
             },
         );
 
-        let mut buffer = [0u8; 65536]; // 64KB buffer
-        let mut done = 0;
-
+        let mut buffer = [0u8; 65536];
+        let mut done = 0u64;
         loop {
             let n = remote_file.read(&mut buffer).await?;
             if n == 0 {
@@ -329,7 +379,6 @@ impl SftpService {
             }
             local_file.write_all(&buffer[..n]).await?;
             done += n as u64;
-
             let _ = app.emit(
                 &progress_event,
                 ProgressEvent {
@@ -340,8 +389,71 @@ impl SftpService {
                 },
             );
         }
-
         Ok(())
+    }
+
+    /// Download a remote file to a local path (public, single-file).
+    pub async fn download(
+        &self,
+        session_id: &str,
+        remote_path: &str,
+        local_path: &str,
+        app: &AppHandle,
+    ) -> Result<()> {
+        self.download_file(session_id, remote_path, local_path, app)
+            .await
+    }
+
+    /// Download a remote file or directory recursively to a local path.
+    /// For directories, creates the local directory and recurses into children.
+    pub fn download_recursive<'a>(
+        &'a self,
+        session_id: &'a str,
+        remote_path: &'a str,
+        local_path: &'a str,
+        app: &'a AppHandle,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            // Stat the remote path. Guard released after the await.
+            let is_dir = {
+                let guard = self
+                    .sessions
+                    .get(session_id)
+                    .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+                let meta = guard.session.metadata(remote_path).await?;
+                meta.is_dir()
+                // guard dropped
+            };
+
+            if is_dir {
+                tokio::fs::create_dir_all(local_path).await?;
+                // List remote directory, collecting into Vec so guard is released.
+                let entries: Vec<_> = {
+                    let guard = self
+                        .sessions
+                        .get(session_id)
+                        .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+                    guard.session.read_dir(remote_path).await?.collect()
+                    // guard dropped
+                };
+                for entry in entries {
+                    let name = entry.file_name();
+                    if name == "." || name == ".." {
+                        continue;
+                    }
+                    let child_remote =
+                        format!("{}/{}", remote_path.trim_end_matches('/'), name);
+                    let child_local =
+                        format!("{}/{}", local_path.trim_end_matches('/'), name);
+                    self.download_recursive(session_id, &child_remote, &child_local, app)
+                        .await?;
+                }
+            } else {
+                self.download_file(session_id, remote_path, local_path, app)
+                    .await?;
+            }
+            Ok(())
+        })
     }
 
     /// Delete a file or directory.

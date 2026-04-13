@@ -81,6 +81,8 @@ pub fn run() {
             handlers::sftp::sftp_list_dir,
             handlers::sftp::sftp_upload,
             handlers::sftp::sftp_download,
+            handlers::sftp::sftp_upload_recursive,
+            handlers::sftp::sftp_download_recursive,
             handlers::sftp::sftp_delete,
             handlers::sftp::sftp_rename,
             handlers::sftp::sftp_mkdir,

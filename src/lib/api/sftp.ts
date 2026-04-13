@@ -71,6 +71,18 @@ export const sftpWorkdir = (sessionId: string) =>
 export const sftpHomeDir = () =>
     invoke<string>('sftp_home_dir');
 
+export const sftpUploadRecursive = (
+    sessionId: string,
+    localPath: string,
+    remotePath: string,
+) => invoke<void>('sftp_upload_recursive', { sessionId, localPath, remotePath });
+
+export const sftpDownloadRecursive = (
+    sessionId: string,
+    remotePath: string,
+    localPath: string,
+) => invoke<void>('sftp_download_recursive', { sessionId, remotePath, localPath });
+
 export const sftpDeleteLocal = (path: string) =>
     invoke<void>('sftp_delete_local', { path });
 
