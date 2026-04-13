@@ -1,172 +1,148 @@
-# AGENTS.md — SSH Orchestrator
+# AGENTS.md
 
-Guidance for AI coding agents working in this repository.
+> Arquivo gerado por `/init` com análise automática. Edite manualmente para ajustar convenções.
 
----
+## Projeto
 
-## Project Overview
+- **Nome:** SSH Config Sync (`ssh-orchestrator`)
+- **Descrição:** Cliente SSH/SFTP cross-platform construído com Tauri v2, oferecendo sincronização seletiva de workspaces via repositórios GitHub privados com resolução de conflitos baseada em CRDTs (LWW-Register).
 
-Tauri v2 desktop app: **React 19 + TypeScript** frontend communicating with a **Rust** backend exclusively via Tauri IPC (`invoke()`). The frontend never touches the filesystem, database, or network directly.
+## Stack
+
+- **Linguagem(s):** TypeScript 5.8 (frontend) · Rust 2021 / 1.77+ (backend)
+- **Frameworks:** React 19, TailwindCSS 3, Vite 7, Tauri v2, Tokio, SQLx 0.7, russh 0.57
+
+## Gerenciamento de Dependências
+
+> **`pnpm` only** — nunca usar `npm` ou `yarn`.
+
+- **Instalar tudo:** `pnpm install`
+- **Adicionar pacote (frontend):** `pnpm add <pacote>`
+- **Remover pacote (frontend):** `pnpm remove <pacote>`
+- **Adicionar crate (backend):** editar `src-tauri/Cargo.toml` e rodar `cd src-tauri && cargo build`
+
+## Comandos Essenciais
+
+- **Dev server (full-stack):** `pnpm tauri dev`
+- **Dev server (frontend only):** `pnpm dev`
+- **Build:** `pnpm build`
+- **Testes (Rust):** `cd src-tauri && cargo test`
+- **Lint (Rust):** `cd src-tauri && cargo clippy`
+- **Formato (Rust):** `cd src-tauri && cargo fmt`
+- **Type-check (TS):** `tsc` (embutido em `pnpm build`)
+
+## Estrutura de Diretórios
+
+- **Código principal (frontend):** `src/`
+- **Código principal (backend):** `src-tauri/src/`
+- **Testes:** `src-tauri/src/sync/crdt.rs` (módulos `#[cfg(test)]`) — não há diretório `tests/` separado
+
+## Módulos
+
+### Frontend — `src/`
+
+- **`src/components/Terminal/`** — Emulador de terminal SSH remoto e PTY local com tabs, split-pane e temas (xterm.js)
+- **`src/components/Sftp/`** — Gerenciador de arquivos dual-pane (remoto ↔ local) via SFTP com drag & drop
+- **`src/components/Servers/`** — Modal de criação e edição de servidores SSH
+- **`src/components/Workspaces/`** — Tela de detalhes de workspace com listagem de servidores
+- **`src/components/sync/`** — Indicador de progresso da sincronização de workspace
+- **`src/components/Sidebar.tsx`** — Barra lateral com lista de workspaces e navegação global
+- **`src/components/TitleBar.tsx`** — Barra de título customizada com controles de janela e ações globais
+- **`src/components/VaultGuard.tsx`** — Guarda de autenticação do vault; exige master password antes de renderizar a app
+- **`src/hooks/`** — Hooks globais: `useTerminalManager`, `useTerminalTheme`, `useToast`, `useAuth`
+- **`src/lib/api/`** — Wrappers finos de `invoke()` por domínio: `servers.ts`, `ssh.ts`, `sftp.ts`, `workspaces.ts`, `pty.ts`
+- **`src/lib/keybindings.ts`** — Mapa de atalhos de teclado (`KEYBINDINGS`) e helper `matchesBinding`
+- **`src/lib/themes.ts`** — Definição de temas de terminal disponíveis
+
+### Backend — `src-tauri/src/`
+
+- **`handlers/`** — Funções IPC `#[tauri::command]`: entry points para workspace, server, ssh, sftp, vault, auth, pty
+- **`services/`** — Lógica de negócio: `crypto.rs` (AES-256-GCM/PBKDF2), `db.rs` (SQLite/sqlx), `ssh.rs` (russh), `sftp.rs`, `pty.rs` (portable-pty)
+- **`models/`** — Structs compartilhadas com `Serialize`/`Deserialize`: `Workspace`, `Server`, `VaultConfig`
+- **`sync/`** — Motor de sincronização: `crdt.rs` (HLC + LWW merge), `git_ops.rs`, `merge.rs`, `repo.rs` (git2)
+- **`auth/`** — GitHub OAuth: troca de código, obtenção de token e dados do usuário (`github.rs`)
+- **`lib.rs`** — Composição do `AppState`, registro de todos os handlers e bootstrap da aplicação
+
+## Arquitetura
+
+- **Estilo:** Layered IPC (Frontend → Tauri IPC Bridge → Handlers → Services)
+- **Descrição:** O frontend React nunca acessa filesystem, banco de dados ou rede diretamente — toda I/O passa por `invoke()`. Dados em stream (output SSH/PTY) chegam ao frontend via eventos Tauri (`listen()`). O `AppState` injeta serviços singleton em todos os handlers via `tauri::State`.
+
+## Variáveis de Ambiente
+
+> Copie `.env.example` para `.env` e ajuste os valores.
+
+- **GitHub OAuth:** `GH_CLIENT_ID`, `GH_CLIENT_SECRET`
+
+## Testes
+
+- **Framework:** Rust `#[cfg(test)]` (nativo — `cargo test`)
+- **Diretório:** `src-tauri/src/sync/crdt.rs` (módulo de testes inline) — sem diretório `tests/` separado
+- **Executar todos:** `cd src-tauri && cargo test`
+- **Filtrar por módulo:** `cd src-tauri && cargo test crdt`
+- **Teste específico com stdout:** `cd src-tauri && cargo test <nome_do_teste> -- --nocapture`
+- **⚠️ Sem framework de testes frontend** (sem Jest/Vitest)
+
+## Convenções de Código
+
+### TypeScript / Frontend
+
+- **Tamanho máximo de função:** 40 linhas
+- **Tamanho máximo de arquivo:** 300 linhas
+- **Aninhamento máximo:** 3 níveis
+- **Comentários / strings de UI:** Português brasileiro
+- **Identificadores (variáveis, funções, classes, tipos):** Inglês
+- Toda chamada `invoke<T>()` deve ser tipada explicitamente
+- Todo componente declara uma `interface Props {}` local
+- `invoke()` sempre envolto em `try/catch`; erros surfaceados via `useToast().error(msg)`
+- Fire-and-forget: `sshWrite(sid, data).catch(() => {})`
+- **Sem ESLint / Prettier** — `tsconfig.json` com `strict: true` é o único linter
+- Imports: caminhos **relativos** (sem path aliases); `import type` para imports somente de tipo
+- Nomes: componentes `PascalCase.tsx`, hooks `camelCase.ts` (prefixo `use`), API wrappers `camelCase.ts`, constantes `UPPER_SNAKE_CASE`
+
+### Rust / Backend
+
+- **Edition:** 2021; formatação padrão `rustfmt` (sem `rustfmt.toml`)
+- **Todos os handlers IPC retornam `Result<T, String>`** — nunca `anyhow::Error` cruzando a fronteira IPC
+- **Services** retornam `anyhow::Result<T>`; usar `?` + `.context("...")`; `.map_err(|e| e.to_string())` no handler
+- **Hard deletes proibidos** — sempre soft-delete (`deleted = 1`)
+- Senhas nunca trafegam em plaintext pelo IPC — frontend recebe `has_saved_password: bool`
+- Estado compartilhado mutável: `Arc<Mutex<T>>` (sync) ou `Arc<tokio::sync::Mutex<T>>` (async); mapas de alta concorrência: `DashMap<K, V>`
+- Logging com `tracing`: `tracing::info!`, `warn!`, `error!`, `debug!`; handlers anotados com `#[tracing::instrument]`
+- Derivar `Debug, Clone, Serialize, Deserialize` em structs; `sqlx::FromRow` para row types
+- Toda linha mutável no banco requer: `id TEXT` (UUID v4), `hlc TEXT` (HLC timestamp), `deleted BOOLEAN DEFAULT 0`
+
+## Commits
+
+Este projeto segue o padrão **Conventional Commits**.
+Antes de commitar, carregue a skill de commit:
 
 ```
-Frontend (React/xterm.js)
-    │  invoke("command_name", { args })
-    ▼
-Tauri IPC Bridge
-    ▼
-Rust Handlers  (src-tauri/src/handlers/)
-    ├── services/   → business logic (crypto, db, ssh, sftp, pty)
-    ├── sync/       → CRDT merge + git operations
-    ├── auth/       → GitHub OAuth
-    └── AppState    → shared state injected into all handlers
+/skill:git-commit-push
 ```
 
----
+Ou siga diretamente as regras em `.agents/skills/git-commit-push/SKILL.md`.
 
-## Build / Run / Test Commands
+**Formato:** `<type>(<scope>): <descrição curta>` — imperativo, máx. ~72 chars, sem ponto final.
 
-```bash
-pnpm install                          # Install deps (pnpm only — never npm/yarn)
-pnpm tauri dev                        # Full-stack dev (Rust + React, hot-reload)
-pnpm dev                              # Frontend only (Vite, no Rust compilation)
-pnpm build                            # Production build; also runs tsc type-check
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `build`, `ci`, `revert`
 
-cd src-tauri && cargo test            # Run ALL Rust tests
-cd src-tauri && cargo test crdt       # Run all tests in the crdt module
-cd src-tauri && cargo test test_hlc_ordering_timestamp          # Single test by name
-cd src-tauri && cargo test test_lww_merge_newer_wins -- --nocapture  # With stdout
-cd src-tauri && cargo fmt             # Format Rust code (run before committing)
-cd src-tauri && cargo clippy          # Lint Rust code (address all warnings)
-```
-
-**No frontend test framework** (no Jest, Vitest, etc.). All tests are Rust `#[cfg(test)]` modules, located primarily in `src-tauri/src/sync/crdt.rs`.
-
----
-
-## Directory Structure
-
-```
-src/                        # React / TypeScript frontend
-├── components/             # PascalCase filenames
-│   ├── Terminal/           # Remote SSH + local PTY terminals (xterm.js)
-│   ├── Sftp/               # Dual-pane SFTP file manager
-│   ├── Servers/            # Add/edit server modals
-│   ├── Workspaces/         # Workspace detail view
-│   └── sync/               # Sync progress indicator
-├── hooks/                  # camelCase filenames (use* prefix)
-└── lib/api/                # Thin invoke() wrappers, one file per domain
-
-src-tauri/src/              # Rust backend
-├── handlers/               # IPC entry points (#[tauri::command] fns)
-├── services/               # Business logic: crypto, db, ssh, sftp, pty
-├── models/                 # Shared structs: Workspace, Server, VaultConfig
-├── sync/                   # CRDT/HLC merge, git push/pull
-└── auth/                   # GitHub OAuth
-```
-
----
-
-## Code Style — TypeScript / Frontend
-
-### Compiler settings (tsconfig.json)
-- `"strict": true`, `"noUnusedLocals": true`, `"noUnusedParameters": true`, `"noFallthroughCasesInSwitch": true`
-- **No ESLint or Prettier.** tsconfig strict mode is the sole linter.
-
-### Imports
-- All imports use **relative paths** (no path aliases).
-- Use the `type` keyword for type-only imports: `import type { Server } from "../../lib/api/servers";`
-- Tauri APIs: `import { invoke } from "@tauri-apps/api/core";` · `import { listen } from "@tauri-apps/api/event";`
-- Icons: `import { Lock, Shield } from "lucide-react";`
-
-### Typing
-- Every component declares a local `interface Props {}`.
-- State machines use union types: `type ConnectionState = "loading" | "connecting" | "connected" | "error"`
-- `invoke` calls are always typed: `invoke<Server[]>("get_servers", { workspaceId })`
-- Use `useRef<XTerm | null>(null)` and `useState<ConnectionState>("loading")` — never untyped.
-- Use `?.` and `??` freely. Avoid `as` assertions except on DOM targets (`e.target as HTMLInputElement`).
-
-### Naming conventions
-| Category | Convention | Example |
-|---|---|---|
-| Component files | `PascalCase.tsx` | `ServerPickerModal.tsx` |
-| Hook files | `camelCase.ts` | `useTerminalManager.ts` |
-| API wrapper files | `camelCase.ts` | `ssh.ts`, `servers.ts` |
-| Interfaces / types | `PascalCase` | `Server`, `ConnectionState` |
-| Hooks | `use` prefix | `useToast`, `useAuth` |
-| Constants | `UPPER_SNAKE_CASE` | `KEYBINDINGS`, `DEFAULT_THEME_ID` |
-| Functions / variables | `camelCase` | `handleConnect`, `openTab` |
-
-### Styling & state
-- **TailwindCSS only.** No CSS Modules or styled-components. Hand-written CSS only for dynamic values.
-- Custom tokens in `tailwind.config.js`: `background`, `foreground`, `primary`, `secondary`.
-- **No Redux or Zustand.** Global state lives in custom hooks: `useTerminalManager`, `useToast` + `ToastProvider`, `useAuth`, `useTerminalTheme`.
-
-### Frontend error handling
-- Wrap every `invoke()` in `try/catch`. Surface errors via `useToast().error(msg)`.
-- Use inline error state (not toast) for form validation.
-- Fire-and-forget: `sshWrite(sid, data).catch(() => {})`.
-- UI strings (including errors) are in **Brazilian Portuguese**.
-
----
-
-## Code Style — Rust / Backend
-
-### Imports & formatting
-- Edition **2021**. No `rustfmt.toml` or `clippy.toml` — standard defaults.
-- Import groups in order: `std` → external crates → `crate::`.
-- No glob imports except `use super::*;` inside `#[cfg(test)]` blocks.
-- Crate-local prefix: `use crate::AppState;`, `use crate::services::crypto::CryptoService;`
-
-### Naming conventions
-| Category | Convention | Example |
-|---|---|---|
-| Structs / Enums | `PascalCase` | `AppState`, `HLC`, `SessionMsg` |
-| Functions / methods | `snake_case` | `get_or_create_node_id`, `merge_workspaces` |
-| Tauri IPC commands | `snake_case` | `ssh_connect`, `pty_spawn` |
-| Tauri event channels | URI-style | `pty://data/{id}`, `pty://close/{id}` |
-| DB columns | `snake_case` | `workspace_id`, `password_enc` |
-
-### Types
-- Derive `Debug`, `Clone`, `Serialize`, `Deserialize` on structs; add `sqlx::FromRow` for DB row types.
-- `Option<T>` for nullable fields. Shared mutable state: `Arc<Mutex<T>>` (sync) or `Arc<tokio::sync::Mutex<T>>` (async).
-- High-concurrency session maps: `DashMap<K, V>`.
-- **All IPC commands return `Result<T, String>`.** Never return `anyhow::Error` across the IPC boundary.
-
-### Error handling
-- **Services**: return `anyhow::Result<T>`; use `?` to propagate and `.context("...")` to annotate.
-- **Handlers**: `.map_err(|e| e.to_string())` at the IPC boundary.
-- DB migrations swallow "column already exists": `.execute(&pool).await.ok();`
-- Log with `tracing`: `tracing::info!`, `tracing::warn!`, `tracing::error!`, `tracing::debug!`
-- Annotate handlers with `#[tracing::instrument]`.
-
-### Database conventions
-- Raw `sqlx` queries (no ORM). Every mutable row requires: `id TEXT` (UUID v4), `hlc TEXT` (HLC timestamp), `deleted BOOLEAN DEFAULT 0`.
-- **Hard deletes are forbidden.** Always soft-delete (`deleted = 1`; never `DELETE FROM`).
-- Passwords (`password_enc`) are AES-256-GCM encrypted and never sent to the frontend as plaintext — the frontend receives `has_saved_password: bool`.
-
----
-
-## Key Architectural Rules
-
-1. **Frontend never accesses filesystem, DB, or network.** All I/O goes through `invoke()`.
-2. **Streaming data uses Tauri events, not return values.** SSH output → `listen("ssh-output-{id}")`. PTY output → `listen("pty://data/{id}")`.
-3. **Passwords never cross the IPC boundary as plaintext.**
-4. **`pnpm` only.** Do not use `npm` or `yarn`.
-
----
-
-## Commit Message Format
-
-[Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <short description>`
-
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `build`, `ci`, `revert`  
-Scopes: `ssh`, `sync`, `vault`, `sftp`, `pty`, `crdt`, `frontend`, `lib`
+**Scopes:** `ssh`, `sync`, `vault`, `sftp`, `pty`, `crdt`, `frontend`, `lib`
 
 ```
 feat(workspace): Add workspace sync toggle
 fix(ssh): Handle reconnect when socket reset
-chore: Bump git2 to 0.20
 feat!: Switch sync format to new JSON schema   # ! = breaking change
 ```
 
-Imperative mood, max ~72 chars, no trailing period. Breaking changes: `BREAKING CHANGE: <desc>` in footer.
+## Agentes e Skills
+
+| Agente    | Função                                         | Modo                   |
+|-----------|------------------------------------------------|------------------------|
+| `build`   | Implementa funcionalidades e corrige bugs      | escrita completa       |
+| `ask`     | Responde perguntas somente-leitura             | somente-leitura        |
+| `plan`    | Cria planos detalhados em `.pi/plans/`         | escrita em .pi/plans/  |
+| `quality` | Auditoria de qualidade de código               | bash + leitura         |
+| `qa`      | Análise de bugs e edge cases                   | bash + leitura         |
+| `test`    | Cria e mantém testes automatizados             | escrita em tests/      |
+| `doc`     | Cria documentação técnica em `docs/`           | escrita em docs/       |
