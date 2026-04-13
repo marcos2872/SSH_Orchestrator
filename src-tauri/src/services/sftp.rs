@@ -350,7 +350,7 @@ impl SftpService {
                 .sessions
                 .get(session_id)
                 .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
-            let mut f = guard.session.open(remote_path).await?;
+            let f = guard.session.open(remote_path).await?;
             let meta = f.metadata().await?;
             let sz = meta.size.unwrap_or(0);
             (f, sz)
