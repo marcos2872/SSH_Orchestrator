@@ -1,7 +1,7 @@
+use anyhow::Result;
 use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
 use std::fs;
 use tauri::{AppHandle, Manager};
-use anyhow::Result;
 
 pub struct DbService {
     pub pool: SqlitePool,
@@ -9,16 +9,19 @@ pub struct DbService {
 
 impl DbService {
     pub async fn new(app_handle: &AppHandle) -> Result<Self> {
-        let app_dir = app_handle.path().app_data_dir().expect("failed to get app data dir");
+        let app_dir = app_handle
+            .path()
+            .app_data_dir()
+            .expect("failed to get app data dir");
         fs::create_dir_all(&app_dir)?;
-        
+
         let db_path = app_dir.join("ssh_config.db");
         let options = SqliteConnectOptions::new()
             .filename(db_path)
             .create_if_missing(true);
-            
+
         let pool = SqlitePool::connect_with(options).await?;
-        
+
         // workspaces table
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS workspaces (
@@ -30,8 +33,10 @@ impl DbService {
                 updated_at DATETIME NOT NULL,
                 hlc TEXT NOT NULL DEFAULT '',
                 deleted BOOLEAN NOT NULL DEFAULT 0
-            )"
-        ).execute(&pool).await?;
+            )",
+        )
+        .execute(&pool)
+        .await?;
 
         // servers table
         sqlx::query(
@@ -48,28 +53,44 @@ impl DbService {
                 hlc TEXT NOT NULL DEFAULT '',
                 deleted BOOLEAN NOT NULL DEFAULT 0,
                 FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
-            )"
-        ).execute(&pool).await?;
-
-        // Migration: add password_enc to existing DBs that don't have it yet
-        sqlx::query(
-            "ALTER TABLE servers ADD COLUMN password_enc TEXT"
+            )",
         )
         .execute(&pool)
-        .await
-        .ok(); // ignore error — column already exists
+        .await?;
+
+        // Migration: add password_enc to existing DBs that don't have it yet
+        sqlx::query("ALTER TABLE servers ADD COLUMN password_enc TEXT")
+            .execute(&pool)
+            .await
+            .ok(); // ignore error — column already exists
 
         // Migrations for sync columns
-        sqlx::query("ALTER TABLE workspaces ADD COLUMN hlc TEXT NOT NULL DEFAULT ''").execute(&pool).await.ok();
-        sqlx::query("ALTER TABLE workspaces ADD COLUMN deleted BOOLEAN NOT NULL DEFAULT 0").execute(&pool).await.ok();
-        sqlx::query("ALTER TABLE servers ADD COLUMN hlc TEXT NOT NULL DEFAULT ''").execute(&pool).await.ok();
-        sqlx::query("ALTER TABLE servers ADD COLUMN deleted BOOLEAN NOT NULL DEFAULT 0").execute(&pool).await.ok();
+        sqlx::query("ALTER TABLE workspaces ADD COLUMN hlc TEXT NOT NULL DEFAULT ''")
+            .execute(&pool)
+            .await
+            .ok();
+        sqlx::query("ALTER TABLE workspaces ADD COLUMN deleted BOOLEAN NOT NULL DEFAULT 0")
+            .execute(&pool)
+            .await
+            .ok();
+        sqlx::query("ALTER TABLE servers ADD COLUMN hlc TEXT NOT NULL DEFAULT ''")
+            .execute(&pool)
+            .await
+            .ok();
+        sqlx::query("ALTER TABLE servers ADD COLUMN deleted BOOLEAN NOT NULL DEFAULT 0")
+            .execute(&pool)
+            .await
+            .ok();
 
         // Migration: SSH key authentication fields
         sqlx::query("ALTER TABLE servers ADD COLUMN ssh_key_enc TEXT")
-            .execute(&pool).await.ok();
+            .execute(&pool)
+            .await
+            .ok();
         sqlx::query("ALTER TABLE servers ADD COLUMN ssh_key_passphrase_enc TEXT")
-            .execute(&pool).await.ok();
+            .execute(&pool)
+            .await
+            .ok();
 
         Ok(Self { pool })
     }

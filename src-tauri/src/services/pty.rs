@@ -27,6 +27,12 @@ pub struct PtyService {
     sessions: DashMap<String, PtySession>,
 }
 
+impl Default for PtyService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PtyService {
     pub fn new() -> Self {
         Self {

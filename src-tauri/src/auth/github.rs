@@ -1,10 +1,10 @@
 use anyhow::Result;
+use rand::{distributions::Alphanumeric, Rng};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use url::Url;
-use rand::{distributions::Alphanumeric, Rng};
-use tokio::net::TcpListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+use url::Url;
 
 // GitHub OAuth configuration will be loaded from environment variables
 
@@ -41,13 +41,17 @@ pub async fn start_oauth_flow() -> Result<String> {
 
     // 3. Construct OAuth URL
     let auth_url_str = "https://github.com/login/oauth/authorize".to_string();
-    
+
     let client_id = env!("GH_CLIENT_ID").trim().to_string();
 
-    tracing::info!("Starting OAuth flow with client_id length: {}", client_id.len());
+    tracing::info!(
+        "Starting OAuth flow with client_id length: {}",
+        client_id.len()
+    );
 
     let mut auth_url = Url::parse(&auth_url_str)?;
-    auth_url.query_pairs_mut()
+    auth_url
+        .query_pairs_mut()
         .append_pair("client_id", &client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("scope", "repo user:email")
@@ -157,13 +161,14 @@ pub async fn start_oauth_flow() -> Result<String> {
     // 6. Exchange code for access token
     let client = Client::new();
     let token_url = "https://github.com/login/oauth/access_token".to_string();
-    
+
     let client_id = env!("GH_CLIENT_ID").trim().to_string();
     let client_secret = env!("GH_CLIENT_SECRET").trim().to_string();
 
     tracing::info!("Exchanging code for token at: {}", token_url);
 
-    let token_res: reqwest::Response = client.post(token_url)
+    let token_res: reqwest::Response = client
+        .post(token_url)
         .header("Accept", "application/json")
         .form(&[
             ("client_id", client_id.as_str()),
@@ -176,8 +181,15 @@ pub async fn start_oauth_flow() -> Result<String> {
 
     if token_res.status() != StatusCode::OK {
         let status = token_res.status();
-        let body = token_res.text().await.unwrap_or_else(|_| "Could not read body".to_string());
-        tracing::error!("Failed to exchange token. Status: {}, Body: {}", status, body);
+        let body = token_res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not read body".to_string());
+        tracing::error!(
+            "Failed to exchange token. Status: {}, Body: {}",
+            status,
+            body
+        );
         return Err(anyhow::anyhow!("Failed to exchange token: {}", status));
     }
 
@@ -191,14 +203,18 @@ pub async fn start_oauth_flow() -> Result<String> {
 
 pub async fn get_user(token: &str) -> Result<GitHubUser> {
     let client = Client::new();
-    let res: reqwest::Response = client.get("https://api.github.com/user")
+    let res: reqwest::Response = client
+        .get("https://api.github.com/user")
         .header("Authorization", format!("Bearer {}", token))
         .header("User-Agent", "ssh-config-sync")
         .send()
         .await?;
-        
+
     if !res.status().is_success() {
-        return Err(anyhow::anyhow!("Failed to fetch user data: {}", res.status()));
+        return Err(anyhow::anyhow!(
+            "Failed to fetch user data: {}",
+            res.status()
+        ));
     }
 
     let user: GitHubUser = res.json().await?;

@@ -417,7 +417,7 @@ pub async fn push_workspace(
         let git_repo = sync_service
             .init_repo(
                 // We already cloned/opened previously so this is just an open.
-                &format!("https://dummy.invalid"),
+                "https://dummy.invalid",
                 &tok,
             )
             .map_err(|e| e.to_string())?;

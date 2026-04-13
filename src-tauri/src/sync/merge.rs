@@ -272,28 +272,29 @@ pub async fn merge_servers(
             // New server from remote — insert including credentials
             let remote_id = Uuid::parse_str(&remote.id)
                 .map_err(|e| anyhow::anyhow!("UUID inválido no merge de servidores: {e}"))?;
-            let remote_ws_id = Uuid::parse_str(&remote.workspace_id)
-                .map_err(|e| anyhow::anyhow!("workspace_id UUID inválido no merge de servidores: {e}"))?;
+            let remote_ws_id = Uuid::parse_str(&remote.workspace_id).map_err(|e| {
+                anyhow::anyhow!("workspace_id UUID inválido no merge de servidores: {e}")
+            })?;
             sqlx::query(
                 "INSERT INTO servers \
                  (id, workspace_id, name, host, port, username, tags, \
                   password_enc, ssh_key_enc, ssh_key_passphrase_enc, hlc, deleted) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
-                .bind(remote_id)
-                .bind(remote_ws_id)
-                .bind(&remote.name)
-                .bind(&remote.host)
-                .bind(remote.port)
-                .bind(&remote.username)
-                .bind(&remote.tags)
-                .bind(&remote.password_enc)
-                .bind(&remote.ssh_key_enc)
-                .bind(&remote.ssh_key_passphrase_enc)
-                .bind(&remote.hlc)
-                .bind(remote.deleted)
-                .execute(&state.db.pool)
-                .await?;
+            .bind(remote_id)
+            .bind(remote_ws_id)
+            .bind(&remote.name)
+            .bind(&remote.host)
+            .bind(remote.port)
+            .bind(&remote.username)
+            .bind(&remote.tags)
+            .bind(&remote.password_enc)
+            .bind(&remote.ssh_key_enc)
+            .bind(&remote.ssh_key_passphrase_enc)
+            .bind(&remote.hlc)
+            .bind(remote.deleted)
+            .execute(&state.db.pool)
+            .await?;
 
             tracing::info!(
                 "merge_servers: inserted new remote server '{}' (host={})",

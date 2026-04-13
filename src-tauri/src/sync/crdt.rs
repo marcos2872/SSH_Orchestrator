@@ -348,3 +348,171 @@ mod tests {
         assert_eq!(parsed, hlc);
     }
 }
+
+// ── Casos não cobertos anteriormente ────────────────────────────────────
+
+#[test]
+fn test_lww_merge_igual_mantem_receiver() {
+    // Quando os dois HLCs são idênticos, merge() é no-op (receiver não muda)
+    let hlc = HLC {
+        timestamp_ms: 500,
+        counter: 0,
+        node_id: "X".to_string(),
+    };
+    let mut r1 = LWWRegister::new("valor_original", hlc.clone());
+    let r2 = LWWRegister::new("valor_challenger", hlc.clone());
+    r1.merge(r2);
+    assert_eq!(
+        r1.value, "valor_original",
+        "HLCs iguais: receiver deve ser mantido (challenger não vence empate exato)"
+    );
+}
+
+#[test]
+fn test_lww_is_superseded_by_igual_retorna_false() {
+    let hlc = HLC {
+        timestamp_ms: 100,
+        counter: 0,
+        node_id: "A".to_string(),
+    };
+    let r = LWWRegister::new("v", hlc.clone());
+    let r_igual = LWWRegister::new("v2", hlc);
+    assert!(
+        !r.is_superseded_by(&r_igual),
+        "HLCs iguais: is_superseded_by deve retornar false"
+    );
+}
+
+#[test]
+fn test_hlc_ordering_e_transitivo() {
+    let t1 = HLC {
+        timestamp_ms: 100,
+        counter: 0,
+        node_id: "A".to_string(),
+    };
+    let t2 = HLC {
+        timestamp_ms: 100,
+        counter: 1,
+        node_id: "A".to_string(),
+    };
+    let t3 = HLC {
+        timestamp_ms: 200,
+        counter: 0,
+        node_id: "A".to_string(),
+    };
+    assert!(t1 < t2);
+    assert!(t2 < t3);
+    assert!(
+        t1 < t3,
+        "ordenação deve ser transitiva: t1 < t2 < t3 → t1 < t3"
+    );
+}
+
+#[test]
+fn test_hlc_ordering_e_antisimetrico() {
+    let t1 = HLC {
+        timestamp_ms: 100,
+        counter: 0,
+        node_id: "A".to_string(),
+    };
+    let t2 = HLC {
+        timestamp_ms: 200,
+        counter: 0,
+        node_id: "A".to_string(),
+    };
+    assert!(t1 < t2);
+    assert!(!(t2 < t1), "se t1 < t2 então NOT t2 < t1 (anti-simetria)");
+}
+
+#[test]
+fn test_lww_merge_e_comutativo_para_vencedor_claro() {
+    // Se um HLC é visivelmente maior, o resultado de a.merge(b) e b.merge(a)
+    // deve convergir para o mesmo vencedor (semântica CRDT)
+    let older = HLC {
+        timestamp_ms: 100,
+        counter: 0,
+        node_id: "A".to_string(),
+    };
+    let newer = HLC {
+        timestamp_ms: 200,
+        counter: 0,
+        node_id: "B".to_string(),
+    };
+
+    let mut ra = LWWRegister::new("valor_antigo", older.clone());
+    let rb = LWWRegister::new("valor_novo", newer.clone());
+    ra.merge(rb);
+
+    let mut rb2 = LWWRegister::new("valor_novo", newer.clone());
+    let ra2 = LWWRegister::new("valor_antigo", older.clone());
+    rb2.merge(ra2);
+
+    assert_eq!(
+        ra.value, rb2.value,
+        "merge deve convergir para o mesmo resultado independente da ordem (comutatividade)"
+    );
+    assert_eq!(ra.value, "valor_novo");
+}
+
+#[test]
+fn test_get_or_create_node_id_cria_e_persiste() {
+    let dir = std::env::temp_dir().join(format!("node_id_test_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let id1 = get_or_create_node_id(&dir);
+    assert!(!id1.is_empty(), "node_id não pode ser vazio");
+    assert_eq!(id1.len(), 8, "node_id deve ter 8 caracteres");
+    assert!(
+        dir.join("node_id.txt").exists(),
+        "node_id.txt deve ser criado"
+    );
+
+    // Segunda chamada deve retornar o mesmo ID
+    let id2 = get_or_create_node_id(&dir);
+    assert_eq!(id1, id2, "node_id deve ser estável entre chamadas");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_get_or_create_node_id_regenera_se_arquivo_vazio() {
+    let dir = std::env::temp_dir().join(format!("node_id_test_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("node_id.txt"), "").unwrap();
+
+    let id = get_or_create_node_id(&dir);
+    assert!(
+        !id.is_empty(),
+        "node_id vazio no arquivo deve gerar novo ID"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_hlc_display_igual_to_string_repr() {
+    let hlc = HLC {
+        timestamp_ms: 9999,
+        counter: 7,
+        node_id: "abc".to_string(),
+    };
+    assert_eq!(format!("{}", hlc), hlc.to_string_repr());
+}
+
+#[test]
+fn test_hlc_parse_com_node_id_vazio() {
+    // Formato "ts:counter:" — node_id vazio
+    let s = "1000:5:";
+    let parsed = HLC::parse(s);
+    assert_eq!(parsed.timestamp_ms, 1000);
+    assert_eq!(parsed.counter, 5);
+    assert_eq!(parsed.node_id, "");
+}
+
+#[test]
+fn test_hlc_parse_com_timestamp_zero() {
+    let parsed = HLC::parse("0:0:node1");
+    assert_eq!(parsed.timestamp_ms, 0);
+    assert_eq!(parsed.counter, 0);
+    assert_eq!(parsed.node_id, "node1");
+}

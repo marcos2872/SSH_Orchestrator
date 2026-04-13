@@ -5,6 +5,7 @@ use tauri::State;
 /// Spawn a local shell in a PTY. Output is delivered via `pty://data/{session_id}` events.
 /// When the shell exits, a `pty://close/{session_id}` event is emitted.
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub fn pty_spawn(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
@@ -24,6 +25,7 @@ pub fn pty_spawn(
 
 /// Send raw bytes (base64-encoded) to the local shell's stdin.
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub fn pty_write(
     state: State<'_, AppState>,
     session_id: String,
@@ -38,6 +40,7 @@ pub fn pty_write(
 
 /// Notify the local PTY of a terminal resize (cols × rows).
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub fn pty_resize(
     state: State<'_, AppState>,
     session_id: String,
@@ -54,6 +57,7 @@ pub fn pty_resize(
 
 /// Kill the local shell and clean up the session.
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub fn pty_kill(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
     state.pty.kill(&session_id).map_err(|e| e.to_string())
 }

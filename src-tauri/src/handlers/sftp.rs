@@ -1,8 +1,9 @@
-use crate::AppState;
 use crate::services::sftp::{LocalEntry, SftpEntry};
+use crate::AppState;
 use tauri::State;
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn sftp_open_session(
     state: State<'_, AppState>,
     session_id: String,
@@ -28,6 +29,7 @@ pub async fn sftp_open_session(
 ///   2. Caller-supplied `password` (typed by the user at the prompt)
 ///   3. Saved encrypted password from DB (decrypted via vault)
 #[tauri::command]
+#[tracing::instrument(skip(state, password))]
 pub async fn sftp_direct_connect(
     state: State<'_, AppState>,
     server_id: String,
@@ -81,9 +83,7 @@ pub async fn sftp_direct_connect(
     };
 
     if resolved_key.is_none() && resolved_password.is_none() {
-        return Err(
-            "Nenhuma credencial disponível. Forneça uma senha ou chave SSH.".to_string(),
-        );
+        return Err("Nenhuma credencial disponível. Forneça uma senha ou chave SSH.".to_string());
     }
 
     state
@@ -102,18 +102,17 @@ pub async fn sftp_direct_connect(
 
 /// List local filesystem entries (dual-pane file manager).
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub fn sftp_list_local(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<Vec<LocalEntry>, String> {
-    state
-        .sftp
-        .list_local(&path)
-        .map_err(|e| e.to_string())
+    state.sftp.list_local(&path).map_err(|e| e.to_string())
 }
 
 /// Get the remote home directory for a given SFTP session (realpath(".")).
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn sftp_workdir(
     state: State<'_, AppState>,
     session_id: String,
@@ -127,13 +126,13 @@ pub async fn sftp_workdir(
 
 /// Get the local home directory ($HOME).
 #[tauri::command]
-pub fn sftp_home_dir(
-    state: State<'_, AppState>,
-) -> String {
+#[tracing::instrument(skip(state))]
+pub fn sftp_home_dir(state: State<'_, AppState>) -> String {
     state.sftp.home_dir()
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn sftp_list_dir(
     state: State<'_, AppState>,
     session_id: String,
@@ -147,6 +146,7 @@ pub async fn sftp_list_dir(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state, app))]
 pub async fn sftp_upload(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
@@ -162,6 +162,7 @@ pub async fn sftp_upload(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state, app))]
 pub async fn sftp_download(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
@@ -177,6 +178,7 @@ pub async fn sftp_download(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn sftp_delete(
     state: State<'_, AppState>,
     session_id: String,
@@ -190,6 +192,7 @@ pub async fn sftp_delete(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn sftp_rename(
     state: State<'_, AppState>,
     session_id: String,
@@ -204,6 +207,7 @@ pub async fn sftp_rename(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn sftp_mkdir(
     state: State<'_, AppState>,
     session_id: String,
@@ -217,6 +221,7 @@ pub async fn sftp_mkdir(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn sftp_close_session(
     state: State<'_, AppState>,
     session_id: String,
@@ -229,17 +234,13 @@ pub async fn sftp_close_session(
 }
 
 #[tauri::command]
-pub fn sftp_delete_local(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<(), String> {
-    state
-        .sftp
-        .delete_local(&path)
-        .map_err(|e| e.to_string())
+#[tracing::instrument(skip(state))]
+pub fn sftp_delete_local(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    state.sftp.delete_local(&path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub fn sftp_rename_local(
     state: State<'_, AppState>,
     from: String,
@@ -252,12 +253,7 @@ pub fn sftp_rename_local(
 }
 
 #[tauri::command]
-pub fn sftp_mkdir_local(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<(), String> {
-    state
-        .sftp
-        .mkdir_local(&path)
-        .map_err(|e| e.to_string())
+#[tracing::instrument(skip(state))]
+pub fn sftp_mkdir_local(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    state.sftp.mkdir_local(&path).map_err(|e| e.to_string())
 }

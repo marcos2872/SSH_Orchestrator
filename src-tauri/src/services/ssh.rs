@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use dashmap::DashMap;
+use russh::keys::PublicKey;
 use russh::{
     client::{self, Handle},
     keys::{decode_secret_key, key::PrivateKeyWithHashAlg},
     ChannelMsg, Disconnect,
 };
-use russh::keys::PublicKey;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, Mutex};
@@ -77,6 +77,12 @@ pub async fn authenticate_with_key(
         ));
     }
     Ok(())
+}
+
+impl Default for SshService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SshService {

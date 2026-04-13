@@ -52,9 +52,17 @@ pub struct SftpService {
     sessions: DashMap<String, SftpState>,
 }
 
+impl Default for SftpService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SftpService {
     pub fn new() -> Self {
-        Self { sessions: DashMap::new() }
+        Self {
+            sessions: DashMap::new(),
+        }
     }
 
     /// Open an SFTP channel over an existing SSH Handle (stored as Arc<Mutex<Handle>>).
@@ -66,7 +74,13 @@ impl SftpService {
         channel.request_subsystem(true, "sftp").await?;
         let session = SftpSession::new(channel.into_stream()).await?;
         let id = Uuid::new_v4().to_string();
-        self.sessions.insert(id.clone(), SftpState { session, _handle: None });
+        self.sessions.insert(
+            id.clone(),
+            SftpState {
+                session,
+                _handle: None,
+            },
+        );
         Ok(id)
     }
 
@@ -105,13 +119,21 @@ impl SftpService {
         channel.request_subsystem(true, "sftp").await?;
         let session = SftpSession::new(channel.into_stream()).await?;
         let id = Uuid::new_v4().to_string();
-        self.sessions.insert(id.clone(), SftpState { session, _handle: Some(handle) });
+        self.sessions.insert(
+            id.clone(),
+            SftpState {
+                session,
+                _handle: Some(handle),
+            },
+        );
         Ok(id)
     }
 
     /// Return the remote working directory (home) via SFTP realpath(".").
     pub async fn workdir(&self, session_id: &str) -> Result<String> {
-        let guard = self.sessions.get(session_id)
+        let guard = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
         let path = guard.session.canonicalize(".").await?;
         Ok(path)
@@ -119,8 +141,7 @@ impl SftpService {
 
     /// Return the local home directory.
     pub fn home_dir(&self) -> String {
-        std::env::var("HOME")
-            .unwrap_or_else(|_| "/".to_string())
+        std::env::var("HOME").unwrap_or_else(|_| "/".to_string())
     }
 
     /// List local filesystem directory.
@@ -133,7 +154,9 @@ impl SftpService {
             let name = e.file_name().to_string_lossy().to_string();
             let full_path = e.path().to_string_lossy().to_string();
             // Skip hidden files
-            if name.starts_with('.') { continue; }
+            if name.starts_with('.') {
+                continue;
+            }
             entries.push(LocalEntry {
                 is_dir: meta.is_dir(),
                 size: if meta.is_file() { meta.len() } else { 0 },
@@ -170,7 +193,9 @@ impl SftpService {
 
     /// List directory contents.
     pub async fn list_dir(&self, session_id: &str, path: &str) -> Result<Vec<SftpEntry>> {
-        let guard = self.sessions.get(session_id)
+        let guard = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
 
         let entries = guard.session.read_dir(path).await?;
@@ -207,7 +232,9 @@ impl SftpService {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| remote_path.to_string());
 
-        let guard = self.sessions.get(session_id)
+        let guard = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
 
         let flags = OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE;
@@ -215,30 +242,38 @@ impl SftpService {
 
         // Emit 0% progress
         let progress_event = format!("sftp://progress/{}", session_id);
-        let _ = app.emit(&progress_event, ProgressEvent {
-            session_id: session_id.to_string(),
-            file: file_name.clone(),
-            bytes_done: 0,
-            bytes_total: total,
-        });
+        let _ = app.emit(
+            &progress_event,
+            ProgressEvent {
+                session_id: session_id.to_string(),
+                file: file_name.clone(),
+                bytes_done: 0,
+                bytes_total: total,
+            },
+        );
 
         let mut buffer = [0u8; 65536]; // 64KB buffer
         let mut done = 0;
 
         loop {
             let n = local_file.read(&mut buffer).await?;
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             remote_file.write_all(&buffer[..n]).await?;
             done += n as u64;
 
-            let _ = app.emit(&progress_event, ProgressEvent {
-                session_id: session_id.to_string(),
-                file: file_name.clone(),
-                bytes_done: done,
-                bytes_total: total,
-            });
+            let _ = app.emit(
+                &progress_event,
+                ProgressEvent {
+                    session_id: session_id.to_string(),
+                    file: file_name.clone(),
+                    bytes_done: done,
+                    bytes_total: total,
+                },
+            );
         }
-        
+
         Ok(())
     }
 
@@ -250,47 +285,60 @@ impl SftpService {
         local_path: &str,
         app: &AppHandle,
     ) -> Result<()> {
-        let file_name = remote_path.split('/').last()
-            .unwrap_or(remote_path).to_string();
+        let file_name = remote_path
+            .split('/')
+            .next_back()
+            .unwrap_or(remote_path)
+            .to_string();
 
-        let guard = self.sessions.get(session_id)
+        let guard = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
 
         let mut remote_file = guard.session.open(remote_path).await?;
         let metadata = remote_file.metadata().await?;
         let total = metadata.size.unwrap_or(0);
-        
+
         // Drop guard early if possible but we need session for read
         // However, russh-sftp File holds a reference to the session? No, it holds the channel.
-        // Actually, DashMap Ref prevents other writes to that segment. 
+        // Actually, DashMap Ref prevents other writes to that segment.
         // Let's copy session or just hold it. For now, hold it.
-        
+
         let mut local_file = tokio::fs::File::create(local_path).await?;
 
         // Emit 0% progress
         let progress_event = format!("sftp://progress/{}", session_id);
-        let _ = app.emit(&progress_event, ProgressEvent {
-            session_id: session_id.to_string(),
-            file: file_name.clone(),
-            bytes_done: 0,
-            bytes_total: total,
-        });
+        let _ = app.emit(
+            &progress_event,
+            ProgressEvent {
+                session_id: session_id.to_string(),
+                file: file_name.clone(),
+                bytes_done: 0,
+                bytes_total: total,
+            },
+        );
 
         let mut buffer = [0u8; 65536]; // 64KB buffer
         let mut done = 0;
 
         loop {
             let n = remote_file.read(&mut buffer).await?;
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             local_file.write_all(&buffer[..n]).await?;
             done += n as u64;
 
-            let _ = app.emit(&progress_event, ProgressEvent {
-                session_id: session_id.to_string(),
-                file: file_name.clone(),
-                bytes_done: done,
-                bytes_total: total,
-            });
+            let _ = app.emit(
+                &progress_event,
+                ProgressEvent {
+                    session_id: session_id.to_string(),
+                    file: file_name.clone(),
+                    bytes_done: done,
+                    bytes_total: total,
+                },
+            );
         }
 
         Ok(())
@@ -298,7 +346,9 @@ impl SftpService {
 
     /// Delete a file or directory.
     pub async fn delete(&self, session_id: &str, path: &str) -> Result<()> {
-        let guard = self.sessions.get(session_id)
+        let guard = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
         if guard.session.remove_file(path).await.is_err() {
             guard.session.remove_dir(path).await?;
@@ -308,7 +358,9 @@ impl SftpService {
 
     /// Rename / move a path.
     pub async fn rename(&self, session_id: &str, from: &str, to: &str) -> Result<()> {
-        let guard = self.sessions.get(session_id)
+        let guard = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
         guard.session.rename(from, to).await?;
         Ok(())
@@ -316,7 +368,9 @@ impl SftpService {
 
     /// Create a remote directory.
     pub async fn mkdir(&self, session_id: &str, path: &str) -> Result<()> {
-        let guard = self.sessions.get(session_id)
+        let guard = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
         guard.session.create_dir(path).await?;
         Ok(())

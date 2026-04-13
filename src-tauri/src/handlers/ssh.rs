@@ -12,6 +12,8 @@ use uuid::Uuid;
 ///
 /// `cols` and `rows` set the initial PTY dimensions (defaults: 80×24).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
+#[tracing::instrument(skip(state, app, password, ssh_key, ssh_key_passphrase))]
 pub async fn ssh_connect(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
@@ -89,9 +91,7 @@ pub async fn ssh_connect(
 
     // At least one credential must be available
     if resolved_key.is_none() && resolved_password.is_none() {
-        return Err(
-            "Nenhuma credencial disponível. Forneça uma senha ou chave SSH.".to_string(),
-        );
+        return Err("Nenhuma credencial disponível. Forneça uma senha ou chave SSH.".to_string());
     }
 
     state
@@ -113,6 +113,7 @@ pub async fn ssh_connect(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn ssh_write(
     state: State<'_, AppState>,
     session_id: String,
@@ -127,6 +128,7 @@ pub async fn ssh_write(
 
 /// Notify the remote PTY of a terminal resize (cols × rows).
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn ssh_resize(
     state: State<'_, AppState>,
     session_id: String,
@@ -141,6 +143,7 @@ pub async fn ssh_resize(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn ssh_disconnect(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
     state
         .ssh

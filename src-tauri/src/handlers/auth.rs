@@ -29,6 +29,7 @@ pub fn reencrypt_token(app: &tauri::AppHandle, state: &tauri::State<'_, crate::A
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state, app))]
 pub async fn github_login(
     app: tauri::AppHandle,
     state: tauri::State<'_, crate::AppState>,
@@ -74,6 +75,7 @@ pub async fn github_login(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state, app))]
 pub async fn get_current_user(
     app: tauri::AppHandle,
     state: tauri::State<'_, crate::AppState>,
@@ -107,6 +109,7 @@ pub async fn get_current_user(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(app))]
 pub async fn github_logout(app: tauri::AppHandle) -> Result<(), String> {
     {
         let mut guard = GITHUB_TOKEN.lock().unwrap();

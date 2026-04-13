@@ -6,6 +6,7 @@ use tauri::State;
 use uuid::Uuid;
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn get_workspaces(state: State<'_, AppState>) -> Result<Vec<Workspace>, String> {
     sqlx::query_as::<_, Workspace>("SELECT * FROM workspaces WHERE deleted = 0 ORDER BY name")
         .fetch_all(&state.db.pool)
@@ -14,6 +15,7 @@ pub async fn get_workspaces(state: State<'_, AppState>) -> Result<Vec<Workspace>
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn create_workspace(
     state: State<'_, AppState>,
     name: String,
@@ -35,12 +37,12 @@ pub async fn create_workspace(
     sqlx::query(
         "INSERT INTO workspaces (id, name, sync_enabled, local_only, color, updated_at, hlc, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(&workspace.id)
+    .bind(workspace.id)
     .bind(&workspace.name)
     .bind(workspace.sync_enabled)
     .bind(workspace.local_only)
     .bind(&workspace.color)
-    .bind(&workspace.updated_at)
+    .bind(workspace.updated_at)
     .bind(&workspace.hlc)
     .bind(workspace.deleted)
     .execute(&state.db.pool)
@@ -51,6 +53,7 @@ pub async fn create_workspace(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn update_workspace(
     state: State<'_, AppState>,
     id: String,
@@ -67,7 +70,7 @@ pub async fn update_workspace(
             .bind(&name)
             .bind(&color)
             .bind(sync)
-            .bind(&now)
+            .bind(now)
             .bind(&hlc)
             .bind(ws_id)
             .execute(&state.db.pool)
@@ -79,7 +82,7 @@ pub async fn update_workspace(
         )
         .bind(&name)
         .bind(&color)
-        .bind(&now)
+        .bind(now)
         .bind(&hlc)
         .bind(ws_id)
         .execute(&state.db.pool)
@@ -91,6 +94,7 @@ pub async fn update_workspace(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn delete_workspace(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let ws_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let hlc = HLC::now(&state.node_id).to_string_repr();

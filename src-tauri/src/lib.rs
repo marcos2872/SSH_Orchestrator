@@ -28,7 +28,9 @@ pub fn run() {
         .setup(|app| {
             // Set window icon explicitly (required on Linux for runtime icon in taskbar/titlebar)
             if let Some(window) = app.get_webview_window("main") {
-                window.set_icon(tauri::include_image!("icons/icon.png")).ok();
+                window
+                    .set_icon(tauri::include_image!("icons/icon.png"))
+                    .ok();
             }
 
             let handle = app.handle();
@@ -40,7 +42,7 @@ pub fn run() {
                 std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
 
                 tracing::info!("Initializing database at {:?}", app_dir);
-                let db = DbService::new(&handle).await.expect("failed to init db");
+                let db = DbService::new(handle).await.expect("failed to init db");
 
                 tracing::info!("Initializing crypto service (Vault)");
                 let crypto = CryptoService::new(&app_dir).expect("failed to init crypto");
