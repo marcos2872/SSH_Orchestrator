@@ -92,6 +92,10 @@ impl DbService {
             .await
             .ok();
 
+        // Migration: preferred auth method ("password" or "ssh_key")
+        sqlx::query("ALTER TABLE servers ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'password'")
+            .execute(&pool).await.ok();
+
         Ok(Self { pool })
     }
 }

@@ -172,9 +172,9 @@ const App: React.FC = () => {
                       <div className="text-center">
                         <div className="w-24 h-24 mx-auto mb-8 bg-slate-800/50 rounded-full flex items-center justify-center border border-slate-700">
                           <img
-                            src="/tauri.svg"
+                            src="/icon.png"
                             className="w-12 h-12 opacity-40"
-                            alt="Tauri logo"
+                            alt="SSH Orchestrator logo"
                           />
                         </div>
                         <h2 className="text-xl font-light tracking-widest text-slate-400 mb-2">
