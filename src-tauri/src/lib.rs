@@ -53,8 +53,8 @@ pub fn run() {
                 tracing::info!("Services initialized, injecting into Tauri state");
                 handle.manage(AppState {
                     db,
-                    ssh: SshService::new(),
-                    sftp: SftpService::new(),
+                    ssh: SshService::new(&app_dir),
+                    sftp: SftpService::new(&app_dir),
                     pty: PtyService::new(),
                     crypto,
                     sync_lock: tokio::sync::Mutex::new(()),

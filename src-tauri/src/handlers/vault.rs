@@ -52,8 +52,8 @@ pub fn setup_vault(
     state: State<'_, AppState>,
     password: String,
 ) -> Result<(), String> {
-    if password.is_empty() {
-        return Err("Password cannot be empty".to_string());
+    if password.len() < 8 {
+        return Err("A senha deve ter pelo menos 8 caracteres.".to_string());
     }
     state
         .crypto
@@ -109,13 +109,41 @@ pub fn import_synced_vault(
     let payload = std::fs::read_to_string(&vault_sync_path)
         .map_err(|_| "O cofre sincronizado não foi encontrado no dispositivo".to_string())?;
 
+    // Salvar token em plaintext ANTES de trocar o vault DEK, enquanto o DEK
+    // atual ainda consegue descriptografar github_token.enc.
+    let token_before_import: Option<String> = {
+        // 1. Tenta memória (in-process)
+        let in_memory = crate::handlers::auth::GITHUB_TOKEN
+            .lock()
+            .unwrap()
+            .clone();
+        if in_memory.is_some() {
+            in_memory
+        } else {
+            // 2. Tenta disco com DEK atual
+            app.path()
+                .app_data_dir()
+                .ok()
+                .and_then(|dir| std::fs::read_to_string(dir.join("github_token.enc")).ok())
+                .and_then(|enc| state.crypto.decrypt(&enc).ok())
+        }
+    };
+
     let import_result = state
         .crypto
         .import_vault(&payload, &password)
         .map_err(|e| e.to_string());
 
     if import_result.is_ok() {
-        crate::handlers::auth::reencrypt_token(&app, &state);
+        // Re-cifrar token com o novo DEK (se tínhamos um)
+        if let Some(token) = token_before_import {
+            if let Ok(app_dir) = app.path().app_data_dir() {
+                if let Ok(encrypted) = state.crypto.encrypt(&token) {
+                    let _ = std::fs::write(app_dir.join("github_token.enc"), encrypted);
+                    tracing::info!("GitHub token re-encrypted with new vault DEK after import");
+                }
+            }
+        }
         record_last_access(&app);
     }
 

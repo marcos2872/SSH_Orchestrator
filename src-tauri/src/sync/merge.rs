@@ -269,12 +269,29 @@ pub async fn merge_servers(
                 resolved.push(local);
             }
         } else {
-            // New server from remote — insert including credentials
+            // New server from remote — verify workspace exists before inserting
             let remote_id = Uuid::parse_str(&remote.id)
                 .map_err(|e| anyhow::anyhow!("UUID inválido no merge de servidores: {e}"))?;
             let remote_ws_id = Uuid::parse_str(&remote.workspace_id).map_err(|e| {
                 anyhow::anyhow!("workspace_id UUID inválido no merge de servidores: {e}")
             })?;
+
+            // Garantir que o workspace de destino existe localmente (evitar FK dangling)
+            let ws_exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = ?)",
+            )
+            .bind(remote_ws_id)
+            .fetch_one(&state.db.pool)
+            .await?;
+
+            if !ws_exists {
+                tracing::warn!(
+                    "merge_servers: ignorando servidor '{}' — workspace {} não existe localmente",
+                    remote.name,
+                    remote.workspace_id,
+                );
+                continue;
+            }
             sqlx::query(
                 "INSERT INTO servers \
                  (id, workspace_id, name, host, port, username, tags, \

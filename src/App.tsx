@@ -196,7 +196,10 @@ const App: React.FC = () => {
                       {/* Left: Nova aba + SFTP */}
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => setShowServerPicker(true)}
+                          onClick={() => {
+                            setPickerMode("tab");
+                            setShowServerPicker(true);
+                          }}
                           title="Nova aba"
                           className="flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
                         >

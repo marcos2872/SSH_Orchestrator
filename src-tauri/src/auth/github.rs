@@ -60,11 +60,37 @@ pub async fn start_oauth_flow() -> Result<String> {
     // 4. Open browser
     open::that(auth_url.as_str())?;
 
-    // 5. Wait for callback
-    let (mut stream, _) = listener.accept().await?;
-    let mut buffer = [0; 2048];
-    let n = stream.read(&mut buffer).await?;
-    let request = String::from_utf8_lossy(&buffer[..n]);
+    // 5. Wait for callback (with timeout so a cancelled browser doesn't hang the app)
+    let accept_result =
+        tokio::time::timeout(std::time::Duration::from_secs(120), listener.accept()).await;
+    let (mut stream, _) = match accept_result {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(anyhow::anyhow!("Erro no servidor de callback OAuth: {}", e)),
+        Err(_) => {
+            return Err(anyhow::anyhow!(
+                "Timeout OAuth: o login não foi concluído em 2 minutos. Tente novamente."
+            ))
+        }
+    };
+
+    // Accumulate the full HTTP request (TCP may fragment across multiple reads)
+    let mut request_bytes: Vec<u8> = Vec::new();
+    let mut tmp = [0u8; 1024];
+    loop {
+        let n = stream.read(&mut tmp).await?;
+        if n == 0 {
+            break;
+        }
+        request_bytes.extend_from_slice(&tmp[..n]);
+        // HTTP headers end with \r\n\r\n
+        if request_bytes.windows(4).any(|w| w == b"\r\n\r\n") {
+            break;
+        }
+        if request_bytes.len() > 8192 {
+            break; // limite de segurança
+        }
+    }
+    let request = String::from_utf8_lossy(&request_bytes);
 
     let mut code = String::new();
     let mut returned_state = String::new();

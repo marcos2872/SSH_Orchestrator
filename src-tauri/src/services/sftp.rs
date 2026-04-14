@@ -3,12 +3,12 @@ use dashmap::DashMap;
 use russh::client::{self, Handle};
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::Mutex;
+use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 use crate::services::ssh::{authenticate_with_key, SshClientHandler};
@@ -52,25 +52,30 @@ struct SftpState {
 
 pub struct SftpService {
     sessions: DashMap<String, SftpState>,
+    known_hosts_path: PathBuf,
 }
 
 impl Default for SftpService {
     fn default() -> Self {
-        Self::new()
+        Self {
+            sessions: DashMap::new(),
+            known_hosts_path: PathBuf::from("known_hosts.json"),
+        }
     }
 }
 
 impl SftpService {
-    pub fn new() -> Self {
+    pub fn new(app_data_dir: &Path) -> Self {
         Self {
             sessions: DashMap::new(),
+            known_hosts_path: app_data_dir.join("known_hosts.json"),
         }
     }
 
-    /// Open an SFTP channel over an existing SSH Handle (stored as Arc<Mutex<Handle>>).
+    /// Open an SFTP channel over an existing SSH Handle (stored as Arc<AsyncMutex<Handle>>).
     pub async fn open_session(
         &self,
-        handle: Arc<Mutex<Handle<SshClientHandler>>>,
+        handle: Arc<AsyncMutex<Handle<SshClientHandler>>>,
     ) -> Result<String> {
         let channel = handle.lock().await.channel_open_session().await?;
         channel.request_subsystem(true, "sftp").await?;
@@ -102,7 +107,26 @@ impl SftpService {
         ssh_key_passphrase: Option<&str>,
     ) -> Result<String> {
         let config = Arc::new(client::Config::default());
-        let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
+
+        // TOFU host-key verification (same known_hosts.json used by SshService)
+        let rejection_reason: Arc<std::sync::Mutex<Option<String>>> =
+            Arc::new(std::sync::Mutex::new(None));
+        let handler = SshClientHandler::new(
+            host,
+            port,
+            self.known_hosts_path.clone(),
+            Arc::clone(&rejection_reason),
+        );
+
+        let mut handle = client::connect(config, (host, port), handler)
+            .await
+            .map_err(|e| {
+                if let Some(msg) = rejection_reason.lock().unwrap().take() {
+                    anyhow!("{}", msg)
+                } else {
+                    anyhow::Error::from(e)
+                }
+            })?;
 
         if let Some(key_pem) = ssh_key {
             authenticate_with_key(&mut handle, username, key_pem, ssh_key_passphrase).await?;
@@ -456,16 +480,88 @@ impl SftpService {
         })
     }
 
-    /// Delete a file or directory.
+    /// Delete a file or directory (recursivamente para diretórios não-vazios).
     pub async fn delete(&self, session_id: &str, path: &str) -> Result<()> {
-        let guard = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
-        if guard.session.remove_file(path).await.is_err() {
-            guard.session.remove_dir(path).await?;
+        // Tenta como arquivo primeiro
+        let remove_file_result = {
+            let guard = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+            guard.session.remove_file(path).await
+        };
+
+        if remove_file_result.is_ok() {
+            return Ok(());
         }
-        Ok(())
+
+        // Não é arquivo — verifica se é diretório
+        let is_dir = {
+            let guard = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+            guard
+                .session
+                .metadata(path)
+                .await
+                .map(|m| m.is_dir())
+                .unwrap_or(false)
+        };
+
+        if is_dir {
+            self.delete_dir_recursive(session_id, path).await
+        } else {
+            // Retorna o erro original da remoção de arquivo
+            remove_file_result
+                .map_err(|e| anyhow!("Falha ao remover '{}': {}", path, e))
+        }
+    }
+
+    /// Remove recursivamente um diretório remoto e todo o seu conteúdo.
+    fn delete_dir_recursive<'a>(
+        &'a self,
+        session_id: &'a str,
+        path: &'a str,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            // Listar o diretório e soltar o guard antes de recursividade
+            let entries: Vec<_> = {
+                let guard = self
+                    .sessions
+                    .get(session_id)
+                    .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+                guard.session.read_dir(path).await?.collect()
+            };
+
+            for entry in entries {
+                let name = entry.file_name();
+                if name == "." || name == ".." {
+                    continue;
+                }
+                let child = format!("{}/{}", path.trim_end_matches('/'), name);
+                if entry.file_type().is_dir() {
+                    self.delete_dir_recursive(session_id, &child).await?;
+                } else {
+                    let guard = self
+                        .sessions
+                        .get(session_id)
+                        .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+                    guard.session.remove_file(&child).await?;
+                }
+            }
+
+            // Diretório agora vazio — remover
+            let guard = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Sessão SFTP não encontrada: {}", session_id))?;
+            guard
+                .session
+                .remove_dir(path)
+                .await
+                .map_err(|e| anyhow!("Falha ao remover diretório '{}': {}", path, e))
+        })
     }
 
     /// Rename / move a path.

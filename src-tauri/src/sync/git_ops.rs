@@ -1,7 +1,18 @@
 use anyhow::{anyhow, Result};
 use git2::{Cred, RemoteCallbacks, Repository, Signature};
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{fs, thread, time::Duration};
+
+/// Resultado de uma tentativa de push.
+#[derive(Debug)]
+pub enum PushOutcome {
+    /// Push fast-forward concluído com sucesso.
+    Success,
+    /// Remoto avançou desde o nosso pull — chamador deve fazer pull e tentar novamente.
+    NonFastForward,
+}
 
 const MAX_RETRIES: u32 = 3;
 const RETRY_BASE_MS: u64 = 500;
@@ -142,6 +153,20 @@ impl GitSyncService {
         }
     }
 
+    /// Abre um repositório já clonado, sem tentar clonar caso não exista.
+    /// Retorna erro descritivo se o diretório não for encontrado.
+    pub fn open_repo(&self) -> Result<Repository> {
+        let repo_path = Path::new(&self.local_path);
+        if !repo_path.exists() {
+            return Err(anyhow!(
+                "Repositório de sync não encontrado em {:?}. \
+                 Execute uma sincronização (pull) primeiro.",
+                repo_path
+            ));
+        }
+        Repository::open(repo_path).map_err(|e| e.into())
+    }
+
     /// Pulls changes from remote (fetch + fast-forward or hard-reset).
     pub fn pull(&self, repo: &Repository, token: &str) -> Result<()> {
         // ── Fetch with retry ────────────────────────────────────────────────
@@ -199,9 +224,12 @@ impl GitSyncService {
         Ok(())
     }
 
-    /// Commits all changes and force-pushes to `main`.
-    pub fn push(&self, repo: &Repository, token: &str, message: &str) -> Result<()> {
-        // ── Stage everything ────────────────────────────────────────────────
+    /// Commita as alterações e tenta um fast-forward push.
+    /// Retorna `Ok(PushOutcome::NonFastForward)` quando o remoto avançou desde
+    /// o nosso pull — o chamador deve fazer pull e tentar novamente.
+    /// Retorna `Err` apenas para falhas de rede ou git.
+    pub fn push(&self, repo: &Repository, token: &str, message: &str) -> Result<PushOutcome> {
+        // ── Stage everything ───────────────────────────────────────────────────
         let mut index = repo.index()?;
         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
         index.update_all(["*"].iter(), None)?;
@@ -212,12 +240,10 @@ impl GitSyncService {
         let signature = Signature::now("SSH Config Sync", "sync@local")?;
         let parent_commit = repo.head()?.peel_to_commit()?;
 
-        // Skip the push entirely when the tree hasn't changed (nothing new to
-        // push). This avoids creating empty commits and wasting a network
-        // round-trip.
+        // Sem alterações — nada a fazer
         if parent_commit.tree_id() == oid {
             tracing::info!("push: tree unchanged, skipping");
-            return Ok(());
+            return Ok(PushOutcome::Success);
         }
 
         repo.commit(
@@ -229,65 +255,73 @@ impl GitSyncService {
             &[&parent_commit],
         )?;
 
-        // ── Push with retry ─────────────────────────────────────────────────
-        //
-        // Strategy: attempt a normal (fast-forward) push first.  Because the
-        // caller always does pull → merge → serialize before pushing, the
-        // local HEAD should be a descendant of the remote HEAD in the common
-        // case, so a fast-forward push will succeed and is the safest option.
-        //
-        // If the normal push fails (e.g. another device pushed between our
-        // pull and this push, or the histories diverged for any other reason),
-        // we fall back to a force push (`+refs/heads/main`) so the sync is
-        // not blocked.  Data loss is mitigated by the fact that we already
-        // merged the remote state into our local DB before serializing.
+        // ── Tenta fast-forward push (com retries para erros de rede) ────────────
         let repo_path_str = self.local_path.clone();
         let tok = token.to_string();
 
-        // First: try a normal push (no `+` prefix = reject non-fast-forward).
-        let normal_result = Self::with_retry("git push (ff)", {
+        Self::with_retry("git push (ff)", {
             let rp = repo_path_str.clone();
             let t = tok.clone();
-            move || {
+            move || -> Result<PushOutcome> {
+                // AtomicBool é criado dentro do closure para ser resetado a cada tentativa
+                let push_rejected = Arc::new(AtomicBool::new(false));
+                let push_rejected_cb = Arc::clone(&push_rejected);
+
+                let mut callbacks = Self::make_callbacks(&t);
+                callbacks.push_update_reference(move |_, status| {
+                    if status.is_some() {
+                        push_rejected_cb.store(true, Ordering::SeqCst);
+                    }
+                    Ok(())
+                });
+
                 let r = Repository::open(&rp)?;
                 let mut remote = r.find_remote("origin")?;
                 let mut push_options = git2::PushOptions::new();
-                push_options.remote_callbacks(Self::make_callbacks(&t));
-                remote.push(
-                    &["refs/heads/main:refs/heads/main"],
-                    Some(&mut push_options),
-                )?;
-                Ok(())
+                push_options.remote_callbacks(callbacks);
+
+                let push_result =
+                    remote.push(&["refs/heads/main:refs/heads/main"], Some(&mut push_options));
+
+                // Detecta rejeição de non-fast-forward (via callback ou mensagem de erro)
+                if push_rejected.load(Ordering::SeqCst) {
+                    return Ok(PushOutcome::NonFastForward);
+                }
+
+                match push_result {
+                    Ok(()) => Ok(PushOutcome::Success),
+                    Err(e) => {
+                        let msg = e.message().to_lowercase();
+                        if msg.contains("non-fast-forward")
+                            || msg.contains("rejected")
+                            || msg.contains("update was rejected")
+                        {
+                            Ok(PushOutcome::NonFastForward)
+                        } else {
+                            Err(e.into()) // Erro de rede — with_retry vai tentar novamente
+                        }
+                    }
+                }
             }
-        });
+        })
+    }
 
-        match normal_result {
-            Ok(()) => {
-                tracing::info!("push: fast-forward push succeeded");
-            }
-            Err(ff_err) => {
-                // Fast-forward was rejected — fall back to force push.
-                tracing::warn!(
-                    "push: fast-forward push failed ({}), falling back to force push",
-                    ff_err,
-                );
+    /// Force-push a branch `main` como último recurso (após todas as tentativas de ff falharem).
+    pub fn push_force(&self, repo: &Repository, token: &str) -> Result<()> {
+        let _ = repo; // O repo já tem o commit; abrimos um novo handle dentro do closure
+        let repo_path_str = self.local_path.clone();
+        let tok = token.to_string();
 
-                Self::with_retry("git push (force)", move || {
-                    let r = Repository::open(&repo_path_str)?;
-                    let mut remote = r.find_remote("origin")?;
-                    let mut push_options = git2::PushOptions::new();
-                    push_options.remote_callbacks(Self::make_callbacks(&tok));
-                    remote.push(
-                        &["+refs/heads/main:refs/heads/main"],
-                        Some(&mut push_options),
-                    )?;
-                    Ok(())
-                })?;
-
-                tracing::info!("push: force push succeeded as fallback");
-            }
-        }
-
-        Ok(())
+        Self::with_retry("git push (force)", move || {
+            let r = Repository::open(&repo_path_str)?;
+            let mut remote = r.find_remote("origin")?;
+            let mut push_options = git2::PushOptions::new();
+            push_options.remote_callbacks(Self::make_callbacks(&tok));
+            remote.push(
+                &["+refs/heads/main:refs/heads/main"],
+                Some(&mut push_options),
+            )?;
+            Ok(())
+        })
     }
 }

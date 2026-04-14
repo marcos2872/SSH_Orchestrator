@@ -22,6 +22,11 @@ impl DbService {
 
         let pool = SqlitePool::connect_with(options).await?;
 
+        // Enforce referential integrity
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await?;
+
         // workspaces table
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS workspaces (

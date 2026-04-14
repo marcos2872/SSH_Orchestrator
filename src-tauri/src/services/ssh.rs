@@ -7,25 +7,96 @@ use russh::{
     keys::{decode_secret_key, key::PrivateKeyWithHashAlg},
     ChannelMsg, Disconnect,
 };
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 // ─── Minimal russh client handler ─────────────────────────────────────────────
-// Data routing is handled by the channel.wait() loop below, not the handler.
 
-pub struct SshClientHandler;
+pub struct SshClientHandler {
+    host: String,
+    port: u16,
+    known_hosts_path: PathBuf,
+    /// Populated when a host-key mismatch is detected; read by `connect` after
+    /// the connection attempt to surface a human-readable error.
+    rejection_reason: Arc<Mutex<Option<String>>>,
+}
+
+impl SshClientHandler {
+    pub fn new(
+        host: &str,
+        port: u16,
+        known_hosts_path: PathBuf,
+        rejection_reason: Arc<Mutex<Option<String>>>,
+    ) -> Self {
+        Self {
+            host: host.to_string(),
+            port,
+            known_hosts_path,
+            rejection_reason,
+        }
+    }
+}
 
 impl client::Handler for SshClientHandler {
     type Error = russh::Error;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &PublicKey,
+        server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
-        // Phase 0.1: TOFU - trust all server keys
-        // Phase 1.0 will implement known_hosts verification
-        Ok(true)
+        // Derive a stable fingerprint from the key's Debug representation, hashed
+        // with SHA-256. Not IETF-standard but unique and stable for a given key.
+        let key_repr = format!("{:?}", server_public_key);
+        let digest =
+            ring::digest::digest(&ring::digest::SHA256, key_repr.as_bytes());
+        let fingerprint = B64.encode(digest.as_ref());
+
+        let host_key = format!("{}:{}", self.host, self.port);
+
+        // Load existing known-hosts (JSON map of "host:port" → fingerprint)
+        let mut known_hosts: HashMap<String, String> =
+            std::fs::read_to_string(&self.known_hosts_path)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
+        match known_hosts.get(&host_key) {
+            Some(stored) if stored == &fingerprint => {
+                tracing::debug!("SSH TOFU: chave verificada para {}", host_key);
+                Ok(true)
+            }
+            Some(_stored) => {
+                // Key changed — possible MITM or server reinstall.
+                let msg = format!(
+                    "Chave SSH do servidor {} mudou desde a última conexão. \
+                     Possível ataque MITM detectado. Se o servidor foi reinstalado, \
+                     remova a entrada correspondente em known_hosts.json no diretório \
+                     de dados do app e tente novamente.",
+                    host_key
+                );
+                tracing::error!("{}", msg);
+                *self.rejection_reason.lock().unwrap() = Some(msg);
+                Ok(false)
+            }
+            None => {
+                // Primeira conexão com este host — TOFU: confiar e registrar.
+                tracing::info!(
+                    "SSH TOFU: registrando nova chave para {} ({}...)",
+                    host_key,
+                    &fingerprint[..16]
+                );
+                known_hosts.insert(host_key, fingerprint);
+                if let Ok(json) = serde_json::to_string_pretty(&known_hosts) {
+                    if let Err(e) = std::fs::write(&self.known_hosts_path, &json) {
+                        tracing::warn!("Falha ao salvar known_hosts.json: {}", e);
+                    }
+                }
+                Ok(true)
+            }
+        }
     }
 }
 
@@ -42,7 +113,7 @@ enum SessionMsg {
 
 struct SshSession {
     /// Used for clean disconnection and SFTP channel sharing
-    handle: Arc<Mutex<Handle<SshClientHandler>>>,
+    handle: Arc<tokio::sync::Mutex<Handle<SshClientHandler>>>,
     /// Send messages (data or resize) to the background task
     msg_tx: mpsc::UnboundedSender<SessionMsg>,
 }
@@ -51,6 +122,7 @@ struct SshSession {
 
 pub struct SshService {
     sessions: DashMap<String, SshSession>,
+    known_hosts_path: PathBuf,
 }
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
@@ -81,14 +153,18 @@ pub async fn authenticate_with_key(
 
 impl Default for SshService {
     fn default() -> Self {
-        Self::new()
+        Self {
+            sessions: DashMap::new(),
+            known_hosts_path: PathBuf::from("known_hosts.json"),
+        }
     }
 }
 
 impl SshService {
-    pub fn new() -> Self {
+    pub fn new(app_data_dir: &Path) -> Self {
         Self {
             sessions: DashMap::new(),
+            known_hosts_path: app_data_dir.join("known_hosts.json"),
         }
     }
 
@@ -96,7 +172,7 @@ impl SshService {
     pub async fn get_handle(
         &self,
         session_id: &str,
-    ) -> Option<Arc<Mutex<Handle<SshClientHandler>>>> {
+    ) -> Option<Arc<tokio::sync::Mutex<Handle<SshClientHandler>>>> {
         self.sessions.get(session_id).map(|s| Arc::clone(&s.handle))
     }
 
@@ -126,7 +202,26 @@ impl SshService {
         let initial_rows = rows.unwrap_or(24);
 
         let config = std::sync::Arc::new(client::Config::default());
-        let mut handle = client::connect(config, (host, port), SshClientHandler).await?;
+
+        // Shared state to capture host-key mismatch reason from the handler
+        let rejection_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let handler = SshClientHandler::new(
+            host,
+            port,
+            self.known_hosts_path.clone(),
+            Arc::clone(&rejection_reason),
+        );
+
+        let mut handle = client::connect(config, (host, port), handler)
+            .await
+            .map_err(|e| {
+                // Surface the specific TOFU mismatch message if available
+                if let Some(msg) = rejection_reason.lock().unwrap().take() {
+                    anyhow!("{}", msg)
+                } else {
+                    anyhow::Error::from(e)
+                }
+            })?;
 
         // ── Authenticate ────────────────────────────────────────────────────
         if let Some(key_pem) = ssh_key {
@@ -222,7 +317,7 @@ impl SshService {
         self.sessions.insert(
             session_id.clone(),
             SshSession {
-                handle: Arc::new(Mutex::new(handle)),
+                handle: Arc::new(tokio::sync::Mutex::new(handle)),
                 msg_tx,
             },
         );

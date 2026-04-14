@@ -3,8 +3,10 @@ use serde::Serialize;
 use std::sync::Mutex;
 use tauri::Manager;
 lazy_static::lazy_static! {
-    // Basic in-memory state for token just for testing, in a real app this should be stored securely
-    static ref GITHUB_TOKEN: Mutex<Option<String>> = Mutex::new(None);
+    /// Token OAuth do GitHub em memória para re-cifragem no import_vault.
+    /// A fonte canônica é `github_token.enc` em disco; este campo é populado
+    /// após login e usado quando o vault é reimportado na mesma sessão.
+    pub(crate) static ref GITHUB_TOKEN: Mutex<Option<String>> = Mutex::new(None);
 }
 
 #[derive(Serialize)]
@@ -111,6 +113,27 @@ pub async fn get_current_user(
 #[tauri::command]
 #[tracing::instrument(skip(app))]
 pub async fn github_logout(app: tauri::AppHandle) -> Result<(), String> {
+    let token_opt = {
+        let guard = GITHUB_TOKEN.lock().unwrap();
+        guard.clone()
+    };
+
+    // Revogar token no servidor GitHub (best-effort; não falha o logout se der erro)
+    if let Some(token) = token_opt {
+        let client_id = env!("GH_CLIENT_ID").trim();
+        let client = reqwest::Client::new();
+        let _ = client
+            .delete(format!(
+                "https://api.github.com/applications/{}/token",
+                client_id
+            ))
+            .basic_auth(client_id, Some(env!("GH_CLIENT_SECRET").trim()))
+            .json(&serde_json::json!({ "access_token": token }))
+            .header("User-Agent", "ssh-config-sync")
+            .send()
+            .await;
+    }
+
     {
         let mut guard = GITHUB_TOKEN.lock().unwrap();
         *guard = None;

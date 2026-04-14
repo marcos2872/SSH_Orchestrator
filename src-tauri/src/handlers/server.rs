@@ -47,6 +47,12 @@ pub async fn create_server(
     save_ssh_key_passphrase: bool,
     auth_method: String,
 ) -> Result<crate::models::Server, String> {
+    if !matches!(auth_method.as_str(), "password" | "ssh_key") {
+        return Err(format!(
+            "auth_method inválido: '{}'. Esperado: 'password' ou 'ssh_key'.",
+            auth_method
+        ));
+    }
     // ── Encrypt password ───────────────────────────────────────────────────
     let password_enc: Option<String> = if save_password {
         match password.as_deref() {
@@ -150,6 +156,13 @@ pub async fn update_server(
 ) -> Result<(), String> {
     let srv_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
 
+    if !matches!(auth_method.as_str(), "password" | "ssh_key") {
+        return Err(format!(
+            "auth_method inválido: '{}'. Esperado: 'password' ou 'ssh_key'.",
+            auth_method
+        ));
+    }
+
     // ── Load existing encrypted values (to preserve when not replaced) ─────
     let existing: (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
         "SELECT password_enc, ssh_key_enc, ssh_key_passphrase_enc FROM servers WHERE id = ?",
@@ -204,7 +217,7 @@ pub async fn update_server(
 
     let hlc = HLC::now(&state.node_id).to_string_repr();
 
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE servers \
          SET name = ?, host = ?, port = ?, username = ?, password_enc = ?, \
              ssh_key_enc = ?, ssh_key_passphrase_enc = ?, auth_method = ?, hlc = ? \
@@ -223,6 +236,10 @@ pub async fn update_server(
     .execute(&state.db.pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    if result.rows_affected() == 0 {
+        return Err(format!("Servidor não encontrado: {}", id));
+    }
 
     Ok(())
 }
