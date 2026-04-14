@@ -1,6 +1,6 @@
 # SSH Orchestrator — Documentação Completa
 
-> **Versão atual:** 0.0.3 · **Plataforma:** Cross-platform (Linux, macOS, Windows) · **Licença:** MIT
+> **Versão atual:** 0.0.8 · **Plataforma:** Cross-platform (Linux, macOS, Windows) · **Licença:** MIT
 
 ---
 
