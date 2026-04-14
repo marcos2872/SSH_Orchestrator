@@ -77,7 +77,7 @@ No primeiro uso, o app exige configuração do vault antes de renderizar qualque
 
 ## Considerações finais
 
-Usar GitHub como storage em vez de um servidor próprio elimina infraestrutura a manter e deixa o histórico auditável. O modelo `CRDT` com `HLC` garante convergência correta sem coordenação central — a escolha foi baseada no paper de [Kulkarni e Demirbas (2014)](http://muratbuffalo.blogspot.com/2014/07/hybrid-logical-clocks.html) sobre clocks lógicos híbridos.
+Usar GitHub como storage em vez de um servidor próprio elimina infraestrutura a manter e deixa o histórico auditável. O modelo `CRDT` com `HLC` garante convergência correta sem coordenação central.
 
 O que o app não resolve: sync em tempo real entre sessões ativas simultâneas. Se dois dispositivos estiverem abertos ao mesmo tempo, cada um só vê as mudanças do outro no próximo pull manual. Para configuração de servidores, esse trade-off é aceitável.
 
