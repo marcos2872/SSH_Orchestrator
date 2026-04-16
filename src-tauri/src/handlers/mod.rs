@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod pty;
 pub mod server;
+pub mod settings;
 pub mod sftp;
 pub mod ssh;
 pub mod vault;

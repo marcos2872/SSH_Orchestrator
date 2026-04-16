@@ -9,7 +9,8 @@ import TitleBar from "./components/TitleBar";
 import VaultGuard from "./components/VaultGuard";
 import { useTerminalManager } from "./hooks/useTerminalManager";
 import { useTerminalTheme } from "./hooks/useTerminalTheme";
-import { matchesBinding, KEYBINDINGS } from "./lib/keybindings";
+import { useKeybindings } from "./hooks/useKeybindings";
+import { matchesBinding } from "./lib/keybindings";
 import type { Server } from "./hooks/useTerminalManager";
 import type { Server as ApiServer } from "./lib/api/servers";
 
@@ -46,6 +47,7 @@ const App: React.FC = () => {
   } = useTerminalManager();
 
   const { themeId, currentTheme, themes, changeTheme } = useTerminalTheme();
+  const { bindings, updateBinding, resetToDefaults } = useKeybindings();
   const [showThemePicker, setShowThemePicker] = useState(false);
 
   const handleSelectWorkspace = (ws: Workspace | null) => {
@@ -75,18 +77,24 @@ const App: React.FC = () => {
     setShowServerPicker(false);
   };
 
-  // ── Keyboard shortcuts (silent — no UI hints) ─────────────────────────────
+  // ── Keyboard shortcuts (configuráveis via Configurações) ───────────────────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
 
-      if (matchesBinding(e, KEYBINDINGS.CLOSE_TAB)) {
+      if (matchesBinding(e, bindings.NEW_TAB)) {
+        e.preventDefault();
+        setPickerMode("tab");
+        setShowServerPicker(true);
+        return;
+      }
+      if (matchesBinding(e, bindings.CLOSE_TAB)) {
         e.preventDefault();
         if (activeTabId) closeTab(activeTabId);
         return;
       }
-      if (matchesBinding(e, KEYBINDINGS.NEXT_TAB)) {
+      if (matchesBinding(e, bindings.NEXT_TAB)) {
         e.preventDefault();
         const mainTabs = tabs.filter((t) => t.id !== splitTab?.id);
         if (mainTabs.length < 2) return;
@@ -94,7 +102,7 @@ const App: React.FC = () => {
         setActiveTabId(mainTabs[(idx + 1) % mainTabs.length].id);
         return;
       }
-      if (matchesBinding(e, KEYBINDINGS.PREV_TAB)) {
+      if (matchesBinding(e, bindings.PREV_TAB)) {
         e.preventDefault();
         const mainTabs = tabs.filter((t) => t.id !== splitTab?.id);
         if (mainTabs.length < 2) return;
@@ -104,7 +112,7 @@ const App: React.FC = () => {
         );
         return;
       }
-      if (matchesBinding(e, KEYBINDINGS.SPLIT_V)) {
+      if (matchesBinding(e, bindings.SPLIT_V)) {
         e.preventDefault();
         if (activeTab && !splitTab) {
           if (activeTab.type === "local") {
@@ -115,7 +123,7 @@ const App: React.FC = () => {
         }
         return;
       }
-      if (matchesBinding(e, KEYBINDINGS.SPLIT_H)) {
+      if (matchesBinding(e, bindings.SPLIT_H)) {
         e.preventDefault();
         if (activeTab && !splitTab) {
           if (activeTab.type === "local") {
@@ -131,6 +139,7 @@ const App: React.FC = () => {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    bindings,
     activeTabId,
     activeTab,
     tabs,
@@ -151,6 +160,9 @@ const App: React.FC = () => {
               onSelectWorkspace={handleSelectWorkspace}
               selectedId={selectedWorkspace?.id}
               hasTabs={hasTabs}
+              bindings={bindings}
+              onUpdateBinding={updateBinding}
+              onResetBindings={resetToDefaults}
             />
             <main className="flex-1 flex overflow-hidden relative">
               {/* ── Main content area ── */}

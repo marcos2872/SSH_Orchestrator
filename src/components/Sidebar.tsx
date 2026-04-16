@@ -25,16 +25,23 @@ import {
   Loader2,
   ExternalLink,
   Lock,
+  Keyboard,
 } from "lucide-react";
 import { useToast } from "../hooks/useToast";
 import { useAuth } from "../hooks/useAuth";
 import Modal from "./Modal";
+import KeybindingsSection from "./Settings/KeybindingsSection";
+import type { CustomKeybindings } from "../hooks/useKeybindings";
+import type { KeyBinding, KeyAction } from "../lib/keybindings";
 
 interface Props {
   onSelectWorkspace: (ws: Workspace | null) => void;
   selectedId?: string;
   /** Quando true, o sidebar colapsa automaticamente e bloqueia troca de workspace */
   hasTabs?: boolean;
+  bindings: CustomKeybindings;
+  onUpdateBinding: (action: KeyAction, binding: KeyBinding) => Promise<void>;
+  onResetBindings: () => Promise<void>;
 }
 
 const COLORS = [
@@ -48,7 +55,14 @@ const COLORS = [
   "#30d158",
 ];
 
-const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId, hasTabs }) => {
+const Sidebar: React.FC<Props> = ({
+  onSelectWorkspace,
+  selectedId,
+  hasTabs,
+  bindings,
+  onUpdateBinding,
+  onResetBindings,
+}) => {
   const toast = useToast();
   const { user, isLoading: authLoading, login, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -648,6 +662,21 @@ const Sidebar: React.FC<Props> = ({ onSelectWorkspace, selectedId, hasTabs }) =>
                 </>
               )}
             </div>
+          </div>
+
+          {/* ── Section: Teclas de Atalho ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Keyboard className="w-4 h-4" style={{ color: "rgba(255,255,255,0.4)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
+                Teclas de Atalho
+              </span>
+            </div>
+            <KeybindingsSection
+              bindings={bindings}
+              onUpdate={onUpdateBinding}
+              onReset={onResetBindings}
+            />
           </div>
 
           {/* ── Section: About ── */}

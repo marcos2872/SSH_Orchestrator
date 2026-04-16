@@ -101,6 +101,19 @@ impl DbService {
         sqlx::query("ALTER TABLE servers ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'password'")
             .execute(&pool).await.ok();
 
+        // settings table — chave/valor para preferências locais (atalhos, etc.)
+        // Nota: `key` é o identificador primário; `hlc` incluído por consistência,
+        // mas settings não participam do sync CRDT entre dispositivos.
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                hlc   TEXT NOT NULL DEFAULT ''
+            )",
+        )
+        .execute(&pool)
+        .await?;
+
         Ok(Self { pool })
     }
 }
