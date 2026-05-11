@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use russh::keys::PublicKey;
 use russh::{
     client::{self, Handle},
-    keys::{decode_secret_key, key::PrivateKeyWithHashAlg},
+    keys::{decode_secret_key, key::PrivateKeyWithHashAlg, HashAlg},
     ChannelMsg, Disconnect,
 };
 use std::collections::HashMap;
@@ -138,7 +138,13 @@ pub async fn authenticate_with_key(
     let private_key = decode_secret_key(key_pem, passphrase)
         .map_err(|e| anyhow!("Falha ao decodificar chave SSH: {}", e))?;
 
-    let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(private_key), None);
+    let hash_alg = if private_key.algorithm().is_rsa() {
+        Some(HashAlg::Sha256)
+    } else {
+        None
+    };
+
+    let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(private_key), hash_alg);
     let auth_result = handle
         .authenticate_publickey(username, key_with_hash)
         .await?;

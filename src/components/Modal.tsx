@@ -48,7 +48,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
             style={{ top: 'var(--titlebar-height)' }}
         >
             <div
-                className={`rounded-3xl ${width} max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200`}
+                className={`app-modal rounded-3xl ${width} max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200`}
                 style={{
                     background: 'rgba(28, 28, 30, 0.88)',
                     backdropFilter: 'blur(40px) saturate(180%)',

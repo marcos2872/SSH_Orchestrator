@@ -19,6 +19,34 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.app-modal input,
+.app-modal textarea,
+.app-modal select {
+  color: rgba(255, 255, 255, 0.9);
+  caret-color: #ffffff;
+}
+
+.app-modal input::placeholder,
+.app-modal textarea::placeholder,
+.app-modal select::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.app-modal input:-webkit-autofill,
+.app-modal input:-webkit-autofill:hover,
+.app-modal input:-webkit-autofill:focus,
+.app-modal textarea:-webkit-autofill,
+.app-modal textarea:-webkit-autofill:hover,
+.app-modal textarea:-webkit-autofill:focus,
+.app-modal select:-webkit-autofill,
+.app-modal select:-webkit-autofill:hover,
+.app-modal select:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 0 0 1000px rgba(255, 255, 255, 0.07);
+  -webkit-box-shadow: inset 0 0 0 1000px rgba(255, 255, 255, 0.07);
+  transition: background-color 9999s ease-out 0s;
+}
+
 #root {
   height: 100%;
   background-color: #000000;

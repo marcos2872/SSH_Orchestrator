@@ -236,6 +236,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                                                 : '••••••••'
                                         }
                                         className={`${inputCls} pr-10`}
+                                        style={inputStyle}
                                         autoComplete="new-password"
                                         onFocus={e => (e.currentTarget.style.border = '0.5px solid rgba(10,132,255,0.7)')}
                                         onBlur={e => (e.currentTarget.style.border = '0.5px solid rgba(255,255,255,0.1)')}
@@ -309,6 +310,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                                                 : 'Deixe em branco se a chave não tiver passphrase'
                                         }
                                         className={`${inputCls} pr-10`}
+                                        style={inputStyle}
                                         autoComplete="new-password"
                                         onFocus={e => (e.currentTarget.style.border = '0.5px solid rgba(10,132,255,0.7)')}
                                         onBlur={e => (e.currentTarget.style.border = '0.5px solid rgba(255,255,255,0.1)')}
