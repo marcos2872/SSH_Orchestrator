@@ -33,7 +33,6 @@ serde_json = "1"
 
 # Encoding
 base64 = "0.22"
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 # X.509 certificate parsing (extract server public key for connection)
 x509-cert = "0.2"

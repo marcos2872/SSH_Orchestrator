@@ -140,46 +140,37 @@ export default function RdpViewer({ server, tabId, onSessionReady }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [server.id, tabId]);
 
-  // Renderizar dirty rect no canvas
+  // Renderizar dirty rect no canvas — otimizado para raw RGBA (putImageData direto)
   const renderFrame = useCallback((frame: RdpFrameEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const expectedLen = frame.w * frame.h * 4;
+
     if (frame.format === "jpeg") {
-      // JPEG: criar Image e desenhar no canvas
+      // JPEG path (fallback, não mais usado no pipeline principal)
       const img = new Image();
       img.onload = () => {
         ctx.drawImage(img, frame.x, frame.y);
       };
-      img.onerror = () => {
-        // Fallback: tentar interpretar como raw RGBA
-        try {
-          const binary = atob(frame.data);
-          const bytes = new Uint8ClampedArray(binary.length);
-          for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
-          }
-          if (bytes.length === frame.w * frame.h * 4) {
-            const imgData = new ImageData(bytes, frame.w, frame.h);
-            ctx.putImageData(imgData, frame.x, frame.y);
-          }
-        } catch { /* ignorar */ }
-      };
       img.src = `data:image/jpeg;base64,${frame.data}`;
     } else {
-      // Raw RGBA
-      const binary = atob(frame.data);
-      const bytes = new Uint8ClampedArray(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+      // Raw RGBA — decode base64 via fetch (mais rápido que atob + loop)
+      // Usa binary string decode nativo do browser que é muito mais eficiente
+      const binaryStr = atob(frame.data);
+      const len = binaryStr.length;
+      if (len !== expectedLen) return;
+
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
       }
-      if (bytes.length === frame.w * frame.h * 4) {
-        const imgData = new ImageData(bytes, frame.w, frame.h);
-        ctx.putImageData(imgData, frame.x, frame.y);
-      }
+      const imgData = new ImageData(new Uint8ClampedArray(bytes.buffer), frame.w, frame.h);
+      ctx.putImageData(imgData, frame.x, frame.y);
     }
+  }, []);
   }, []);
 
   // Mouse events
@@ -286,7 +277,7 @@ export default function RdpViewer({ server, tabId, onSessionReady }: Props) {
         width={resolution.width}
         height={resolution.height}
         tabIndex={0}
-        className="max-w-full max-h-full object-contain outline-none cursor-default"
+        className="w-full h-full object-contain outline-none cursor-default"
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}

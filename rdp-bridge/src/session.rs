@@ -11,8 +11,6 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use base64::Engine;
-use image::ImageEncoder;
-use image::codecs::jpeg::JpegEncoder;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, trace, warn};
 
@@ -525,7 +523,7 @@ fn handle_input(
     Ok(())
 }
 
-/// Extrai e emite uma região atualizada da imagem como JPEG base64
+/// Extrai e emite uma região atualizada da imagem como RGBA raw base64
 fn emit_frame_update(
     image: &DecodedImage,
     left: u16,
@@ -557,7 +555,7 @@ fn emit_frame_update(
         }
     }
 
-    let data_b64 = encode_rgba_as_jpeg(&region_data, w as u32, h as u32);
+    let data_b64 = base64::engine::general_purpose::STANDARD.encode(&region_data);
 
     let _ = event_tx.send(Event::Frame {
         session_id: session_id.to_string(),
@@ -565,7 +563,7 @@ fn emit_frame_update(
         y,
         width: w,
         height: h,
-        format: "jpeg".to_string(),
+        format: "rgba".to_string(),
         data_b64,
     });
 }
@@ -870,8 +868,9 @@ fn process_bitmap_update(
         let out_w = visible_width.min(encoded_width) as u32;
         let out_h = visible_height.min(encoded_height) as u32;
 
-        // Emitir como JPEG comprimido (muito menor que RGBA raw)
-        let data_b64 = encode_rgba_as_jpeg(&rgba_data, out_w, out_h);
+        // Emitir como RGBA raw base64 (mais rápido que JPEG encode/decode por tile).
+        // O frontend usa putImageData direto — zero decode overhead.
+        let data_b64 = base64::engine::general_purpose::STANDARD.encode(&rgba_data);
 
         let _ = event_tx.send(Event::Frame {
             session_id: session_id.to_string(),
@@ -879,7 +878,7 @@ fn process_bitmap_update(
             y: rect.top,
             width: out_w as u16,
             height: out_h as u16,
-            format: "jpeg".to_string(),
+            format: "rgba".to_string(),
             data_b64,
         });
         emitted += 1;
@@ -1014,38 +1013,4 @@ fn convert_to_rgba(
     rgba
 }
 
-/// Codifica dados RGBA como JPEG e retorna base64.
-/// Qualidade 75 oferece bom equilíbrio entre tamanho e fidelidade para desktop remoto.
-/// JPEG não suporta alpha, então convertemos RGBA → RGB antes de codificar.
-fn encode_rgba_as_jpeg(rgba_data: &[u8], width: u32, height: u32) -> String {
-    if width == 0 || height == 0 {
-        return String::new();
-    }
 
-    let pixel_count = (width * height) as usize;
-    let expected_len = pixel_count * 4;
-    if rgba_data.len() < expected_len {
-        // Dados insuficientes — fallback para RGBA raw base64
-        debug!("encode_rgba_as_jpeg: dados insuficientes ({} < {})", rgba_data.len(), expected_len);
-        return base64::engine::general_purpose::STANDARD.encode(rgba_data);
-    }
-
-    // Converter RGBA → RGB (strip alpha channel) — JPEG não suporta alpha
-    let mut rgb_data = Vec::with_capacity(pixel_count * 3);
-    for chunk in rgba_data[..expected_len].chunks_exact(4) {
-        rgb_data.push(chunk[0]); // R
-        rgb_data.push(chunk[1]); // G
-        rgb_data.push(chunk[2]); // B
-    }
-
-    let mut jpeg_buf = Vec::with_capacity(pixel_count); // JPEG é muito menor que raw
-    let encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, 75);
-
-    match encoder.write_image(&rgb_data, width, height, image::ExtendedColorType::Rgb8) {
-        Ok(()) => base64::engine::general_purpose::STANDARD.encode(&jpeg_buf),
-        Err(e) => {
-            debug!("JPEG encode failed ({}x{}): {:?} — fallback to raw RGBA", width, height, e);
-            base64::engine::general_purpose::STANDARD.encode(rgba_data)
-        }
-    }
-}
