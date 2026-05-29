@@ -224,7 +224,7 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
                     const path = '/' + breadcrumbs.slice(0, i + 1).join('/');
                     return (
                         <React.Fragment key={path}>
-                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
+                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.45)" }}>/</span>
                             <button
                                 onClick={() => listDir(path)}
                                 className="text-xs font-mono shrink-0 transition-colors"
@@ -272,12 +272,12 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
                     <div className="p-3 text-xs" style={{ color: "#ff453a", background: "rgba(255,69,58,0.08)" }}>⚠ {error}</div>
                 )}
                 {!loading && !sessionId && (
-                    <div className="flex items-center justify-center h-full text-xs px-4 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>
+                    <div className="flex items-center justify-center h-full text-xs px-4 text-center" style={{ color: "rgba(255,255,255,0.5)" }}>
                         Conecte-se via SSH primeiro para usar o SFTP
                     </div>
                 )}
                 {!loading && sftpSessionId && entries.length === 0 && (
-                    <div className="flex items-center justify-center h-20 text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>
+                    <div className="flex items-center justify-center h-20 text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
                         Pasta vazia
                     </div>
                 )}
@@ -294,7 +294,7 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
                         <span className="shrink-0">{entry.is_dir ? '📂' : '📄'}</span>
                         <span className="flex-1 truncate text-xs font-mono">{entry.name}</span>
                         {!entry.is_dir && (
-                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>{formatSize(entry.size)}</span>
+                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.5)" }}>{formatSize(entry.size)}</span>
                         )}
                     </div>
                 ))}
@@ -305,7 +305,7 @@ const SftpPanel: React.FC<Props> = ({ sessionId, onClose }) => {
                 className="px-3 py-2 text-xs text-center shrink-0"
                 style={{
                     borderTop: "0.5px solid rgba(255,255,255,0.06)",
-                    color: "rgba(255,255,255,0.2)",
+                    color: "rgba(255,255,255,0.5)",
                 }}
             >
                 Arraste arquivos aqui para fazer upload

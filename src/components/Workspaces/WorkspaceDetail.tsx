@@ -15,13 +15,15 @@ import {
   Key,
 } from "lucide-react";
 import { useToast } from "../../hooks/useToast";
-import AddServerModal from "../Servers/AddServerModal";
+import EditServerModal from "../Servers/EditServerModal";
+import { isRdpEnabled } from "../Servers/rdpPrefs";
 import Modal from "../Modal";
 
 interface Props {
   workspace: { id: string; name: string; color: string; sync_enabled?: boolean };
   onConnect: (server: Server) => void;
   onSftp: (server: Server) => void;
+  onRdp: (server: Server) => void;
   onOpenLocal: () => void;
   onWorkspaceUpdated: (ws: { id: string; name: string; color: string; sync_enabled?: boolean }) => void;
   onWorkspaceDeleted: () => void;
@@ -42,6 +44,7 @@ const WorkspaceDetail: React.FC<Props> = ({
   workspace,
   onConnect,
   onSftp,
+  onRdp,
   onOpenLocal,
   onWorkspaceUpdated,
   onWorkspaceDeleted,
@@ -155,7 +158,7 @@ const WorkspaceDetail: React.FC<Props> = ({
             <h2 className="text-[15px] font-semibold text-white leading-tight">
               {workspace.name}
             </h2>
-            <p className="text-[11px]" style={{ color: "rgba(235,235,245,0.4)" }}>
+            <p className="text-[11px]" style={{ color: "rgba(235,235,245,0.55)" }}>
               {servers.length} servidor{servers.length !== 1 ? "es" : ""}
             </p>
           </div>
@@ -198,7 +201,7 @@ const WorkspaceDetail: React.FC<Props> = ({
         {loading ? (
           <div
             className="flex items-center justify-center py-20 text-sm"
-            style={{ color: "rgba(235,235,245,0.35)" }}
+            style={{ color: "rgba(235,235,245,0.55)" }}
           >
             Carregando servidores...
           </div>
@@ -231,7 +234,7 @@ const WorkspaceDetail: React.FC<Props> = ({
               <h3 className="font-semibold text-[15px] text-white mb-1">Terminal Local</h3>
               <p
                 className="text-xs font-mono mb-4"
-                style={{ color: "rgba(235,235,245,0.45)" }}
+                style={{ color: "rgba(235,235,245,0.55)" }}
               >
                 Shell do sistema
               </p>
@@ -328,17 +331,18 @@ const WorkspaceDetail: React.FC<Props> = ({
                 </h3>
                 <p
                   className="text-xs font-mono mb-4 truncate"
-                  style={{ color: "rgba(235,235,245,0.4)" }}
+                  style={{ color: "rgba(235,235,245,0.55)" }}
                 >
                   {server.username}@{server.host}:{server.port}
                 </p>
                 <div
-                  className="flex items-center gap-2 pt-4"
+                  className="grid grid-cols-3 gap-2 pt-4"
                   style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}
                 >
                   <button
                     onClick={() => onConnect(server)}
-                    className="flex-1 py-2 text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 text-white/70"
+                    title="Terminal SSH"
+                    className="flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-semibold rounded-xl transition-colors text-white/60"
                     style={{ background: "rgba(255,255,255,0.06)" }}
                     onMouseEnter={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(10,132,255,0.15)";
@@ -346,15 +350,16 @@ const WorkspaceDetail: React.FC<Props> = ({
                     }}
                     onMouseLeave={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
-                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)";
                     }}
                   >
-                    <TerminalIcon className="w-3 h-3" /> Connect
+                    <TerminalIcon className="w-4 h-4" />
+                    SSH
                   </button>
                   <button
                     onClick={() => onSftp(server)}
-                    title="SFTP"
-                    className="px-3 py-2 text-xs font-semibold rounded-xl transition-colors text-white/70"
+                    title="Transferência de arquivos (SFTP)"
+                    className="flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-semibold rounded-xl transition-colors text-white/60"
                     style={{ background: "rgba(255,255,255,0.06)" }}
                     onMouseEnter={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(100,210,255,0.15)";
@@ -362,10 +367,33 @@ const WorkspaceDetail: React.FC<Props> = ({
                     }}
                     onMouseLeave={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
-                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)";
                     }}
                   >
-                    <HardDrive className="w-3 h-3" />
+                    <HardDrive className="w-4 h-4" />
+                    SFTP
+                  </button>
+                  <button
+                    onClick={() => isRdpEnabled(server.id) && onRdp(server)}
+                    title={isRdpEnabled(server.id) ? "Área de trabalho remota (RDP)" : "RDP desabilitado para este servidor"}
+                    disabled={!isRdpEnabled(server.id)}
+                    className="flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-semibold rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-white/60"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                    onMouseEnter={e => {
+                      if (!e.currentTarget.disabled) {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(191,90,242,0.15)";
+                        (e.currentTarget as HTMLButtonElement).style.color = "#bf5af2";
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!e.currentTarget.disabled) {
+                        (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
+                        (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)";
+                      }
+                    }}
+                  >
+                    <Monitor className="w-4 h-4" />
+                    RDP
                   </button>
                 </div>
               </div>
@@ -380,7 +408,7 @@ const WorkspaceDetail: React.FC<Props> = ({
               >
                 <Shield
                   className="w-10 h-10 mx-auto mb-4"
-                  style={{ color: "rgba(255,255,255,0.12)" }}
+                  style={{ color: "rgba(255,255,255,0.3)" }}
                 />
                 <h3
                   className="font-medium mb-2"
@@ -390,7 +418,7 @@ const WorkspaceDetail: React.FC<Props> = ({
                 </h3>
                 <p
                   className="text-sm mb-6"
-                  style={{ color: "rgba(235,235,245,0.3)" }}
+                  style={{ color: "rgba(235,235,245,0.5)" }}
                 >
                   Comece adicionando um novo host.
                 </p>
@@ -409,7 +437,7 @@ const WorkspaceDetail: React.FC<Props> = ({
 
       {/* ── Add / Edit Server Modal ── */}
       {(showAddModal || editingServer) && (
-        <AddServerModal
+        <EditServerModal
           workspaceId={workspace.id}
           server={editingServer}
           onClose={() => {
@@ -437,7 +465,7 @@ const WorkspaceDetail: React.FC<Props> = ({
               <div>
                 <label
                   className="block text-[11px] font-medium mb-1.5"
-                  style={{ color: "rgba(235,235,245,0.4)" }}
+                  style={{ color: "rgba(235,235,245,0.55)" }}
                 >
                   Nome do Workspace
                 </label>
@@ -479,7 +507,7 @@ const WorkspaceDetail: React.FC<Props> = ({
               <div>
                 <label
                   className="block text-[11px] font-medium mb-2"
-                  style={{ color: "rgba(235,235,245,0.4)" }}
+                  style={{ color: "rgba(235,235,245,0.55)" }}
                 >
                   Cor
                 </label>

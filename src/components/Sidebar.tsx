@@ -253,7 +253,7 @@ const Sidebar: React.FC<Props> = ({
               title={hasTabs ? "Feche as conexões ativas para expandir" : "Expandir sidebar"}
               disabled={hasTabs}
               className={`p-2 rounded-lg transition-colors mb-1 ${hasTabs ? 'opacity-40 cursor-not-allowed' : ''}`}
-              style={{ color: "rgba(255,255,255,0.4)" }}
+              style={{ color: "rgba(255,255,255,0.55)" }}
               onMouseEnter={e => { if (!hasTabs) e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
@@ -312,12 +312,12 @@ const Sidebar: React.FC<Props> = ({
           <>
             <nav className="flex-1 overflow-y-auto space-y-0.5 p-3">
               <div className="flex items-center justify-between mb-3 px-2">
-                <span className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
+                <span className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
                   Workspaces
                   {hasTabs && (
                     <Lock
                       className="w-2.5 h-2.5"
-                      style={{ color: "rgba(235,235,245,0.3)" }}
+                      style={{ color: "rgba(235,235,245,0.5)" }}
                     />
                   )}
                 </span>
@@ -466,8 +466,8 @@ const Sidebar: React.FC<Props> = ({
 
               {workspaces.length === 0 && (
                 <div className="px-3 py-8 text-center">
-                  <Folder className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: "rgba(255,255,255,0.5)" }} />
-                  <p className="text-xs" style={{ color: "rgba(235,235,245,0.35)" }}>
+                  <Folder className="w-8 h-8 mx-auto mb-2 opacity-40" style={{ color: "rgba(255,255,255,0.6)" }} />
+                  <p className="text-xs" style={{ color: "rgba(235,235,245,0.5)" }}>
                     Nenhum workspace
                   </p>
                 </div>
@@ -517,8 +517,8 @@ const Sidebar: React.FC<Props> = ({
           {/* ── Section: GitHub Sync ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Github className="w-4 h-4" style={{ color: "rgba(255,255,255,0.4)" }} />
-              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
+              <Github className="w-4 h-4" style={{ color: "rgba(255,255,255,0.55)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
                 GitHub Sync
               </span>
             </div>
@@ -543,11 +543,11 @@ const Sidebar: React.FC<Props> = ({
                     <p className="text-sm font-semibold text-white truncate">
                       {user.name || user.login}
                     </p>
-                    <p className="text-xs font-mono truncate" style={{ color: "rgba(235,235,245,0.4)" }}>
+                    <p className="text-xs font-mono truncate" style={{ color: "rgba(235,235,245,0.55)" }}>
                       @{user.login}
                     </p>
                     {user.email && (
-                      <p className="text-xs truncate" style={{ color: "rgba(235,235,245,0.35)" }}>
+                      <p className="text-xs truncate" style={{ color: "rgba(235,235,245,0.5)" }}>
                         {user.email}
                       </p>
                     )}
@@ -558,14 +558,14 @@ const Sidebar: React.FC<Props> = ({
                     rel="noopener noreferrer"
                     title="Ver perfil no GitHub"
                     className="p-1.5 rounded-lg transition-colors shrink-0"
-                    style={{ color: "rgba(255,255,255,0.4)" }}
+                    style={{ color: "rgba(255,255,255,0.55)" }}
                     onMouseEnter={e => {
                       (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.08)";
                       (e.currentTarget as HTMLAnchorElement).style.color = "white";
                     }}
                     onMouseLeave={e => {
                       (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
-                      (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.4)";
+                      (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.55)";
                     }}
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -622,8 +622,8 @@ const Sidebar: React.FC<Props> = ({
           {/* ── Section: Vault ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Shield className="w-4 h-4" style={{ color: "rgba(255,255,255,0.4)" }} />
-              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
+              <Shield className="w-4 h-4" style={{ color: "rgba(255,255,255,0.55)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
                 Vault
               </span>
             </div>
@@ -650,7 +650,7 @@ const Sidebar: React.FC<Props> = ({
                             : "Vault desbloqueado"
                           : "Vault não configurado"}
                       </p>
-                      <p className="text-xs" style={{ color: "rgba(235,235,245,0.4)" }}>
+                      <p className="text-xs" style={{ color: "rgba(235,235,245,0.55)" }}>
                         {vaultConfigured
                           ? vaultLocked
                             ? "O vault está protegido. Reinicie o app para desbloquear."
@@ -667,8 +667,8 @@ const Sidebar: React.FC<Props> = ({
           {/* ── Section: Teclas de Atalho ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Keyboard className="w-4 h-4" style={{ color: "rgba(255,255,255,0.4)" }} />
-              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
+              <Keyboard className="w-4 h-4" style={{ color: "rgba(255,255,255,0.55)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
                 Teclas de Atalho
               </span>
             </div>
@@ -693,7 +693,7 @@ const Sidebar: React.FC<Props> = ({
                   <p className="text-sm font-semibold text-white/80">
                     SSH Orchestrator
                   </p>
-                  <p className="text-xs" style={{ color: "rgba(235,235,245,0.3)" }}>
+                  <p className="text-xs" style={{ color: "rgba(235,235,245,0.5)" }}>
                     v0.1.0 · Tauri + React + Rust
                   </p>
                 </div>

@@ -400,7 +400,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
               </div>
             )}
 
-            <p className="text-xs mb-5" style={{ color: "rgba(255,255,255,0.25)" }}>
+            <p className="text-xs mb-5" style={{ color: "rgba(255,255,255,0.5)" }}>
               Edite o servidor para salvar {isSshKeyAuth ? "a chave SSH" : "uma senha ou chave SSH"} e conectar sem digitar sempre.
             </p>
             <div className="flex gap-3">

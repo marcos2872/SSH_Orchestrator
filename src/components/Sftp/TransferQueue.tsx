@@ -178,9 +178,9 @@ const TransferQueue: React.FC<Props> = ({ queue, onCancel, onClearDone }) => {
                                         onClick={() => onCancel(item.id)}
                                         title="Cancelar"
                                         className="transition-colors"
-                                        style={{ color: 'rgba(255,255,255,0.25)' }}
+                                        style={{ color: 'rgba(255,255,255,0.5)' }}
                                         onMouseEnter={e => { e.currentTarget.style.color = '#ff453a'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.25)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; }}
                                     >
                                         <X size={12} />
                                     </button>

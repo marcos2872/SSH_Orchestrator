@@ -161,7 +161,7 @@ const FilePane: React.FC<PaneProps> = ({
                     const path = '/' + segments.slice(0, i + 1).join('/');
                     return (
                         <React.Fragment key={path}>
-                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
+                            <span className="text-xs shrink-0" style={{ color: "rgba(255,255,255,0.45)" }}>/</span>
                             <button
                                 onClick={() => onNavigate(path)}
                                 className="text-xs font-mono shrink-0 max-w-[80px] truncate transition-colors"
@@ -220,14 +220,14 @@ const FilePane: React.FC<PaneProps> = ({
                             <span className="shrink-0">{entry.is_dir ? '📂' : '📄'}</span>
                             <span className="flex-1 font-mono truncate">{entry.name}</span>
                             {!entry.is_dir && (
-                                <span className="shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>{fmt(entry.size)}</span>
+                                <span className="shrink-0" style={{ color: "rgba(255,255,255,0.5)" }}>{fmt(entry.size)}</span>
                             )}
                         </div>
                     );
                 })}
 
                 {!loading && !error && entries.length === 0 && (
-                    <div className="flex items-center justify-center h-20 text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>Pasta vazia</div>
+                    <div className="flex items-center justify-center h-20 text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>Pasta vazia</div>
                 )}
             </div>
 

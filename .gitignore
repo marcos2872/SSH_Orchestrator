@@ -52,3 +52,6 @@ Thumbs.db
 *.AppImage
 
 .obsidian
+
+# Rust build artifacts
+**/target/

@@ -1,0 +1,49 @@
+[package]
+name = "rdp-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone RDP client sidecar for SSH Orchestrator (IronRDP)"
+
+[[bin]]
+name = "rdp-bridge"
+path = "src/main.rs"
+
+[dependencies]
+# IronRDP crates (blocking API — runs in dedicated threads)
+ironrdp-connector = "0.8"
+ironrdp-session = "0.8"
+ironrdp-blocking = "0.8"
+ironrdp-tls = { version = "0.1", features = ["rustls"] }
+ironrdp-pdu = "0.7"
+ironrdp-graphics = "0.7"
+ironrdp-core = "0.1"
+ironrdp-input = "0.5"
+ironrdp-cliprdr = "0.5"
+ironrdp-displaycontrol = "0.5"
+ironrdp-dvc = "0.3"
+ironrdp-svc = "0.6"
+
+# Runtime & IO
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = "0.26"
+
+# Serialization (JSON-over-stdio protocol)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Encoding
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+
+# X.509 certificate parsing (extract server public key for connection)
+x509-cert = "0.2"
+
+# Error handling & logging
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

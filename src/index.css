@@ -290,7 +290,7 @@ body {
 
 .titlebar-dropdown-email {
   font-size: 11px;
-  color: rgba(235, 235, 245, 0.3);
+  color: rgba(235, 235, 245, 0.5);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;

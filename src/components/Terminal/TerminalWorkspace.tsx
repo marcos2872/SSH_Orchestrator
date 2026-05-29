@@ -4,6 +4,7 @@ import Terminal, { type TerminalRef } from "./Terminal";
 import LocalTerminal, { type LocalTerminalRef } from "./LocalTerminal";
 import TerminalTabBar from "./TerminalTabBar";
 import SftpDualPane from "../Sftp/SftpDualPane";
+import RdpViewer from "../Rdp/RdpViewer";
 import type { Tab, SplitMode } from "../../hooks/useTerminalManager";
 
 interface Props {
@@ -69,6 +70,19 @@ const TerminalWorkspace: React.FC<Props> = ({
       return (
         <div className="flex-1 overflow-hidden">
           {tab.server && <SftpDualPane server={tab.server} />}
+        </div>
+      );
+    }
+
+    if (tab.type === "rdp") {
+      if (!tab.server) return null;
+      return (
+        <div className="flex-1 overflow-hidden">
+          <RdpViewer
+            server={tab.server}
+            tabId={tab.id}
+            onSessionReady={(sid) => onSessionId(tab.id, sid)}
+          />
         </div>
       );
     }

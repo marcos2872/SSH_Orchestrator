@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod pty;
+pub mod rdp;
 pub mod server;
 pub mod settings;
 pub mod sftp;

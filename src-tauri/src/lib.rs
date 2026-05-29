@@ -1,6 +1,7 @@
 use crate::services::crypto::CryptoService;
 use crate::services::db::DbService;
 use crate::services::pty::PtyService;
+use crate::services::rdp::RdpService;
 use crate::services::sftp::SftpService;
 use crate::services::ssh::SshService;
 use tauri::Manager;
@@ -10,6 +11,7 @@ pub struct AppState {
     pub ssh: SshService,
     pub sftp: SftpService,
     pub pty: PtyService,
+    pub rdp: RdpService,
     pub crypto: CryptoService,
     pub sync_lock: tokio::sync::Mutex<()>,
     /// Stable device identifier used as the node_id component of HLC timestamps.
@@ -56,6 +58,7 @@ pub fn run() {
                     ssh: SshService::new(&app_dir),
                     sftp: SftpService::new(&app_dir),
                     pty: PtyService::new(),
+                    rdp: RdpService::new(&app_dir),
                     crypto,
                     sync_lock: tokio::sync::Mutex::new(()),
                     node_id,
@@ -108,6 +111,13 @@ pub fn run() {
             handlers::pty::pty_write,
             handlers::pty::pty_resize,
             handlers::pty::pty_kill,
+            handlers::rdp::rdp_connect,
+            handlers::rdp::rdp_disconnect,
+            handlers::rdp::rdp_send_mouse,
+            handlers::rdp::rdp_send_key,
+            handlers::rdp::rdp_send_unicode,
+            handlers::rdp::rdp_clipboard_set,
+            handlers::rdp::rdp_resize,
             handlers::settings::get_setting,
             handlers::settings::set_setting,
             sync::pull_workspace,

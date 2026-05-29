@@ -26,7 +26,7 @@ const App: React.FC = () => {
     null,
   );
   const [showServerPicker, setShowServerPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<"tab" | "sftp">("tab");
+  const [pickerMode, setPickerMode] = useState<"tab" | "sftp" | "rdp">("tab");
 
   const {
     tabs,
@@ -35,6 +35,7 @@ const App: React.FC = () => {
     splitMode,
     openTab,
     openSftpTab,
+    openRdpTab,
     openLocalTab,
     closeTab,
     splitPane,
@@ -68,9 +69,18 @@ const App: React.FC = () => {
     [openSftpTab],
   );
 
+  const handleRdp = useCallback(
+    (server: Server) => {
+      openRdpTab(server);
+    },
+    [openRdpTab],
+  );
+
   const handlePickServer = (srv: ApiServer) => {
     if (pickerMode === "sftp") {
       openSftpTab(srv as Server);
+    } else if (pickerMode === "rdp") {
+      openRdpTab(srv as Server);
     } else {
       openTab(srv as Server);
     }
@@ -173,6 +183,7 @@ const App: React.FC = () => {
                       workspace={selectedWorkspace}
                       onConnect={handleConnect}
                       onSftp={handleSftp}
+                      onRdp={handleRdp}
                       onOpenLocal={openLocalTab}
                       onWorkspaceUpdated={setSelectedWorkspace}
                       onWorkspaceDeleted={() => {
@@ -180,19 +191,19 @@ const App: React.FC = () => {
                       }}
                     />
                   ) : (
-                    <div className="flex-1 flex items-center justify-center text-slate-500">
+                    <div className="flex-1 flex items-center justify-center text-slate-400">
                       <div className="text-center">
                         <div className="w-24 h-24 mx-auto mb-8 bg-slate-800/50 rounded-full flex items-center justify-center border border-slate-700">
                           <img
                             src="/icon.png"
-                            className="w-12 h-12 opacity-40"
+                            className="w-12 h-12 opacity-60"
                             alt="SSH Orchestrator logo"
                           />
                         </div>
-                        <h2 className="text-xl font-light tracking-widest text-slate-400 mb-2">
+                        <h2 className="text-xl font-light tracking-widest text-slate-300 mb-2">
                           ORCHESTRATOR READY
                         </h2>
-                        <p className="text-sm font-light tracking-wide text-slate-600">
+                        <p className="text-sm font-light tracking-wide text-slate-400">
                           Selecione um Workspace para gerenciar seus servidores
                         </p>
                       </div>
@@ -237,6 +248,17 @@ const App: React.FC = () => {
                           <span>⬛</span>
                           <span>Local</span>
                         </button>
+                        <button
+                          onClick={() => {
+                            setPickerMode("rdp");
+                            setShowServerPicker(true);
+                          }}
+                          title="Remote Desktop (RDP)"
+                          className="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
+                        >
+                          <span>🖥</span>
+                          <span>RDP</span>
+                        </button>
                       </div>
 
                       {/* Right: Tema + fechar tudo */}
@@ -244,7 +266,7 @@ const App: React.FC = () => {
                         <div className="relative">
                           <button
                             onClick={() => setShowThemePicker((v) => !v)}
-                            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-white px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
+                            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
                             title="Tema do terminal"
                           >
                             <span
@@ -284,7 +306,7 @@ const App: React.FC = () => {
                         </div>
                         <button
                           onClick={closeAll}
-                          className="text-xs text-slate-600 hover:text-red-400 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
+                          className="text-xs text-slate-400 hover:text-red-400 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
                           title="Fechar tudo"
                         >
                           ✕ tudo

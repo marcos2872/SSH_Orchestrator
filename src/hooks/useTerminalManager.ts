@@ -18,7 +18,7 @@ export type SplitMode = "none" | "horizontal" | "vertical";
 export interface Tab {
   id: string;
   server: Server | null;
-  type: "terminal" | "sftp" | "local";
+  type: "terminal" | "sftp" | "local" | "rdp";
   /** UUID retornado pelo backend ao conectar via SSH (necessário para SFTP via terminal) */
   sshSessionId: string | null;
 }
@@ -40,6 +40,15 @@ export function useTerminalManager() {
   const openSftpTab = useCallback((server: Server) => {
     const id = `tab-${crypto.randomUUID()}`;
     const newTab: Tab = { id, server, type: "sftp", sshSessionId: null };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(id);
+    return id;
+  }, []);
+
+  /** Open an RDP (remote desktop) tab */
+  const openRdpTab = useCallback((server: Server) => {
+    const id = `tab-${crypto.randomUUID()}`;
+    const newTab: Tab = { id, server, type: "rdp", sshSessionId: null };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(id);
     return id;
@@ -125,6 +134,7 @@ export function useTerminalManager() {
     splitMode,
     openTab,
     openSftpTab,
+    openRdpTab,
     openLocalTab,
     closeTab,
     splitPane,

@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:rdp": "cargo build --manifest-path rdp-bridge/Cargo.toml",
+    "build:rdp:release": "cargo build --manifest-path rdp-bridge/Cargo.toml --release",
+    "tauri:dev": "pnpm build:rdp && tauri dev",
     "preview": "vite preview",
     "tauri": "tauri"
   },
