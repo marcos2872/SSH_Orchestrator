@@ -171,7 +171,6 @@ export default function RdpViewer({ server, tabId, onSessionReady }: Props) {
       ctx.putImageData(imgData, frame.x, frame.y);
     }
   }, []);
-  }, []);
 
   // Mouse events
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
