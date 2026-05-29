@@ -115,6 +115,12 @@ enum BridgeEvent {
         session_id: String,
         text: String,
     },
+    #[serde(rename = "resolution")]
+    Resolution {
+        session_id: String,
+        width: u16,
+        height: u16,
+    },
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -452,6 +458,13 @@ fn handle_bridge_event(app: &AppHandle, event: BridgeEvent) {
             let _ = app.emit(
                 &format!("rdp://clipboard/{}", session_id),
                 text,
+            );
+        }
+        BridgeEvent::Resolution { session_id, width, height } => {
+            tracing::info!("RDP sessão {} resize: {}x{}", session_id, width, height);
+            let _ = app.emit(
+                &format!("rdp://resolution/{}", session_id),
+                RdpResolutionEvent { width, height },
             );
         }
     }

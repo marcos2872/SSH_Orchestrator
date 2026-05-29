@@ -6,6 +6,7 @@ import {
   rdpSendMouse,
   rdpSendKey,
   rdpClipboardSet,
+  rdpResize,
   RDP_MOUSE,
 } from "../../lib/api/rdp";
 import { useToast } from "../../hooks/useToast";
@@ -139,6 +140,39 @@ export default function RdpViewer({ server, tabId, onSessionReady }: Props) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [server.id, tabId]);
+
+  // Resize dinâmico: quando o container muda de tamanho, solicita nova resolução ao servidor
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry || !sessionIdRef.current) return;
+
+      const newW = Math.max(800, Math.floor(entry.contentRect.width));
+      const newH = Math.max(600, Math.floor(entry.contentRect.height));
+
+      // Só redimensionar se mudou significativamente (evita loops)
+      if (Math.abs(newW - resolution.width) < 16 && Math.abs(newH - resolution.height) < 16) return;
+
+      // Debounce de 500ms para não bombardear o servidor durante drag
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (sessionIdRef.current) {
+          rdpResize(sessionIdRef.current, newW, newH).catch(() => {});
+        }
+      }, 500);
+    });
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, [resolution.width, resolution.height]);
 
   // Renderizar dirty rect no canvas — otimizado para raw RGBA (putImageData direto)
   const renderFrame = useCallback((frame: RdpFrameEvent) => {

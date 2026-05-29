@@ -88,6 +88,12 @@ pub enum Event {
         session_id: String,
         text: String,
     },
+    #[serde(rename = "resolution")]
+    Resolution {
+        session_id: String,
+        width: u16,
+        height: u16,
+    },
 }
 
 fn default_true() -> bool {

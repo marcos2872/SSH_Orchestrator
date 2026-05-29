@@ -18,7 +18,8 @@ use ironrdp_blocking::{connect_begin, connect_finalize, mark_as_upgraded, Framed
 use ironrdp_connector::legacy;
 use ironrdp_connector::sspi::generator::NetworkRequest;
 use ironrdp_connector::sspi::network_client::NetworkClient;
-use ironrdp_connector::{self as connector, Credentials, DesktopSize};
+use ironrdp_connector::{self as connector, Credentials, DesktopSize, Sequence, Written};
+use ironrdp_connector::connection_activation::ConnectionActivationSequence;
 use ironrdp_graphics::image_processing::PixelFormat;
 use ironrdp_graphics::rdp6::BitmapStreamDecoder;
 use ironrdp_graphics::rle as rle_decompress;
@@ -422,8 +423,28 @@ fn run_rdp_session(
                         | ActiveStageOutput::PointerBitmap(_) => {
                             // TODO: Enviar eventos de cursor para o frontend
                         }
-                        ActiveStageOutput::DeactivateAll(_) => {
-                            warn!("DeactivateAll recebido, reconexão não implementada");
+                        ActiveStageOutput::DeactivateAll(cas) => {
+                            info!("DeactivateAll recebido — executando reativação");
+                            match run_reactivation(cas, &mut upgraded_framed) {
+                                Ok(new_size) => {
+                                    info!("Reativação concluída: {}x{}", new_size.width, new_size.height);
+                                    // Recriar DecodedImage com novo tamanho
+                                    image = DecodedImage::new(
+                                        PixelFormat::RgbA32,
+                                        new_size.width,
+                                        new_size.height,
+                                    );
+                                    // Notificar frontend da nova resolução
+                                    let _ = event_tx.send(Event::Resolution {
+                                        session_id: session_id.to_string(),
+                                        width: new_size.width,
+                                        height: new_size.height,
+                                    });
+                                }
+                                Err(e) => {
+                                    error!("Falha na reativação: {:?}", e);
+                                }
+                            }
                         }
                     }
                 }
@@ -521,6 +542,44 @@ fn handle_input(
     }
 
     Ok(())
+}
+
+/// Executa a sequência de reativação após DeactivateAll (usado após resize).
+/// Lê PDUs do servidor e responde até atingir o estado Finalized com o novo DesktopSize.
+fn run_reactivation(
+    mut cas: Box<ConnectionActivationSequence>,
+    framed: &mut UpgradedFramed,
+) -> Result<DesktopSize> {
+    use ironrdp_connector::connection_activation::ConnectionActivationState;
+    use ironrdp_core::WriteBuf;
+
+    let mut buf = WriteBuf::new();
+
+    loop {
+        buf.clear();
+
+        let written = if let Some(hint) = cas.next_pdu_hint() {
+            let pdu = framed.read_by_hint(hint)
+                .map_err(|e| anyhow::anyhow!("Erro lendo PDU na reativação: {:?}", e))?;
+            cas.step(&pdu, &mut buf)
+                .map_err(|e| anyhow::anyhow!("Erro no step de reativação: {:?}", e))?
+        } else {
+            cas.step_no_input(&mut buf)
+                .map_err(|e| anyhow::anyhow!("Erro no step_no_input de reativação: {:?}", e))?
+        };
+
+        if let Some(response_len) = written.size() {
+            let response = &buf[..response_len];
+            framed.write_all(response)
+                .map_err(|e| anyhow::anyhow!("Erro escrevendo resposta de reativação: {:?}", e))?;
+        }
+
+        // Verificar se atingimos o estado terminal (Finalized)
+        let state = cas.connection_activation_state();
+        if let ConnectionActivationState::Finalized { desktop_size, .. } = state {
+            return Ok(desktop_size);
+        }
+    }
 }
 
 /// Extrai e emite uma região atualizada da imagem como RGBA raw base64
