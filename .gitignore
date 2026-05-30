@@ -55,3 +55,9 @@ Thumbs.db
 
 # Rust build artifacts
 **/target/
+
+# FreeRDP build artifacts
+freerdp-*/build/
+
+# rdp-bridge-c build artifacts
+rdp-bridge-c/build/

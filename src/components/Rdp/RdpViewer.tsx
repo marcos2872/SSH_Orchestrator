@@ -207,53 +207,77 @@ export default function RdpViewer({ server, tabId, onSessionReady }: Props) {
   }, []);
 
   // Mouse events
+  // Com object-contain, a imagem é renderizada mantendo aspect ratio dentro do
+  // bounding rect. Precisamos calcular o offset real da imagem para mapear
+  // coordenadas do mouse corretamente.
+  const getScaledCoords = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
+    const rect = canvas.getBoundingClientRect();
+    const canvasW = resolution.width;
+    const canvasH = resolution.height;
+
+    // Calcular dimensões reais da imagem com object-contain
+    const containerAspect = rect.width / rect.height;
+    const imageAspect = canvasW / canvasH;
+
+    let renderW: number, renderH: number, offsetX: number, offsetY: number;
+    if (containerAspect > imageAspect) {
+      // Container mais largo: imagem ajusta pela altura, barras nas laterais
+      renderH = rect.height;
+      renderW = rect.height * imageAspect;
+      offsetX = (rect.width - renderW) / 2;
+      offsetY = 0;
+    } else {
+      // Container mais alto: imagem ajusta pela largura, barras em cima/baixo
+      renderW = rect.width;
+      renderH = rect.width / imageAspect;
+      offsetX = 0;
+      offsetY = (rect.height - renderH) / 2;
+    }
+
+    const localX = e.clientX - rect.left - offsetX;
+    const localY = e.clientY - rect.top - offsetY;
+
+    const x = Math.round((localX / renderW) * canvasW);
+    const y = Math.round((localY / renderH) * canvasH);
+
+    return {
+      x: Math.max(0, Math.min(canvasW - 1, x)),
+      y: Math.max(0, Math.min(canvasH - 1, y)),
+    };
+  }, [resolution]);
+
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!sessionIdRef.current || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = resolution.width / rect.width;
-    const scaleY = resolution.height / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const { x, y } = getScaledCoords(e);
     rdpSendMouse(sessionIdRef.current, x, y, 0, RDP_MOUSE.MOVE).catch(() => {});
-  }, [resolution]);
+  }, [getScaledCoords]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!sessionIdRef.current || !canvasRef.current) return;
     e.preventDefault();
-    // preventDefault no mousedown impede o foco automático; focamos manualmente
-    // para que os eventos de teclado (onKeyDown/onKeyUp) passem a disparar.
     canvasRef.current.focus();
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = resolution.width / rect.width;
-    const scaleY = resolution.height / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const { x, y } = getScaledCoords(e);
     const button = e.button === 0 ? 1 : e.button === 2 ? 2 : 3;
     rdpSendMouse(sessionIdRef.current, x, y, button, RDP_MOUSE.DOWN).catch(() => {});
-  }, [resolution]);
+  }, [getScaledCoords]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!sessionIdRef.current || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = resolution.width / rect.width;
-    const scaleY = resolution.height / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const { x, y } = getScaledCoords(e);
     const button = e.button === 0 ? 1 : e.button === 2 ? 2 : 3;
     rdpSendMouse(sessionIdRef.current, x, y, button, 0).catch(() => {});
-  }, [resolution]);
+  }, [getScaledCoords]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     if (!sessionIdRef.current || !canvasRef.current) return;
     e.preventDefault();
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = resolution.width / rect.width;
-    const scaleY = resolution.height / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const { x, y } = getScaledCoords(e as unknown as React.MouseEvent<HTMLCanvasElement>);
     const flags = RDP_MOUSE.VERTICAL_WHEEL | (e.deltaY > 0 ? RDP_MOUSE.WHEEL_NEGATIVE : 0);
     rdpSendMouse(sessionIdRef.current, x, y, 0, flags).catch(() => {});
-  }, [resolution]);
+  }, [getScaledCoords]);
 
   // Keyboard events
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {

@@ -1,0 +1,19 @@
+include(ExternalProject)
+
+ExternalProject_Add(
+  webp
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/external/webp
+  GIT_REPOSITORY https://chromium.googlesource.com/webm/libwebp
+  GIT_TAG v1.6.0
+  GIT_SHALLOW TRUE
+  CMAKE_ARGS ${ANDROID_CMAKE_ARGS}
+             -DCMAKE_INSTALL_PREFIX:PATH=${DEPS_INSTALL_DIR}
+             -DCMAKE_INSTALL_LIBDIR:STRING=lib
+             -DWEBP_BUILD_CWEBP:BOOL=OFF
+             -DWEBP_BUILD_DWEBP:BOOL=OFF
+             -DWEBP_BUILD_GIF2WEBP:BOOL=OFF
+             -DWEBP_BUILD_IMG2WEBP:BOOL=OFF
+             -DWEBP_BUILD_VWEBP:BOOL=OFF
+             -DWEBP_BUILD_WEBPINFO:BOOL=OFF
+             -DWEBP_BUILD_WEBPMUX:BOOL=OFF
+)

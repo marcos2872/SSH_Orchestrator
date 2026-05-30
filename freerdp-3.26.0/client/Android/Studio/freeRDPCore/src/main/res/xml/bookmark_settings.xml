@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+/*
+   Bookmark Settings Layout
+
+   Copyright 2013 Thincast Technologies GmbH, Author: Martin Fleisz
+
+   This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+   If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+*/
+ -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:freerdp="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:key="category.host"
+        android:title="@string/settings_cat_host">
+        <EditTextPreference
+            android:key="bookmark.label"
+            android:singleLine="true"
+            android:title="@string/settings_label"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            android:key="bookmark.hostname"
+            android:singleLine="true"
+            android:title="@string/settings_hostname"
+            app:useSimpleSummaryProvider="true" />
+        <com.freerdp.freerdpcore.utils.IntEditTextPreference
+            android:inputType="number"
+            android:key="bookmark.port"
+            android:numeric="integer"
+            android:title="@string/settings_port"
+            freerdp:bounds_default="3389"
+            freerdp:bounds_max="65535"
+            freerdp:bounds_min="10" 
+            app:useSimpleSummaryProvider="true"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/settings_cat_credentials">
+        <Preference
+            android:key="bookmark.credentials"
+            android:title="@string/settings_credentials"
+            app:fragment="com.freerdp.freerdpcore.presentation.BookmarkActivity$CredentialsFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="category.settings"
+        android:title="@string/settings_cat_settings">
+
+        <Preference
+            android:key="bookmark.screen"
+            android:title="@string/settings_screen"
+            app:fragment="com.freerdp.freerdpcore.presentation.BookmarkActivity$ScreenFragment" />
+
+        <Preference
+            android:key="bookmark.performance"
+            android:title="@string/settings_performance"
+            app:fragment="com.freerdp.freerdpcore.presentation.BookmarkActivity$PerformanceFragment" />
+
+        <Preference
+            android:key="bookmark.advanced"
+            android:title="@string/settings_advanced"
+            app:fragment="com.freerdp.freerdpcore.presentation.BookmarkActivity$AdvancedFragment" />
+
+        <Preference
+            android:key="bookmark.debug"
+            android:title="@string/settings_debug"
+            app:fragment="com.freerdp.freerdpcore.presentation.BookmarkActivity$DebugFragment" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

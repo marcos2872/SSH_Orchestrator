@@ -142,7 +142,7 @@ impl RdpService {
     pub fn new(app_data_dir: &Path) -> Self {
         // Procura o sidecar em múltiplas localizações:
         // 1. Ao lado do executável principal (produção/bundle)
-        // 2. No diretório do projeto rdp-bridge (desenvolvimento)
+        // 2. rdp-bridge-c/build/rdp-bridge (desenvolvimento)
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
@@ -152,22 +152,15 @@ impl RdpService {
             if next_to_exe.exists() {
                 next_to_exe
             } else {
-                // Dev mode: rdp-bridge/target/debug/rdp-bridge
-                // O exe principal fica em src-tauri/target/debug/
-                // Então subimos 3 níveis: debug → target → src-tauri → project root
+                // Dev mode: o exe principal fica em src-tauri/target/debug/
+                // Subimos 3 níveis: debug → target → src-tauri → project root
                 let project_root = dir
                     .parent() // target/
                     .and_then(|p| p.parent()) // src-tauri/
                     .and_then(|p| p.parent()); // project root
 
                 if let Some(root) = project_root {
-                    let dev_path = root.join("rdp-bridge/target/debug/rdp-bridge");
-                    if dev_path.exists() {
-                        dev_path
-                    } else {
-                        // Fallback: release build
-                        root.join("rdp-bridge/target/release/rdp-bridge")
-                    }
+                    root.join("rdp-bridge-c/build/rdp-bridge")
                 } else {
                     next_to_exe
                 }

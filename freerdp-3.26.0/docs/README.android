@@ -1,0 +1,88 @@
+Overview
+========
+
+The FreeRDP Android port consists of three parts:
+* Android Java GUI (client/Android/Studio)
+* FreeRDP library and its dependencies
+* JNI bindings (client/Android/android_freerdp.c
+  and client/Android/Studio/freeRDPCore/src/main/java/com/freerdp/freerdpcore/services/LibFreeRDP.java)
+* More documentation might be found at https://github.com/FreeRDP/FreeRDP/wiki/Compilation
+
+Build requirements
+=================
+
+For the Android port some additional dependencies need to be fulfilled:
+
+* for JNI
+- CMake >= 3.13 (install CMake from Android SDK. It is part of the SDK Tools)
+- Android NDK (>= r23)
+
+* for the Java GUI
+- Android SDK
+
+* All native dependencies (OpenSSL, OpenH264, FFmpeg, Opus, cJSON, libpng,
+  libwebp, libjpeg-turbo, uriparser) are fetched and built automatically
+  by the CMake superbuild.
+
+* [optional] cJSON is required for logging in to Azure accounts
+* [optional] Kerberos authentication is supported by MIT or Heimdal kerberos libraries
+
+Building the APK (Android Studio)
+================
+
+The build uses a self-contained CMake superbuild. All native dependencies
+(OpenSSL, FFmpeg, Opus, OpenH264, cJSON, libpng, libwebp, libjpeg-turbo,
+uriparser) and FreeRDP itself are built automatically when Android Studio
+runs the CMake build.
+
+Requirements:
+* Android Studio with NDK 29 (ndkVersion is set in build.gradle)
+* Internet access on first build (dependencies are downloaded automatically)
+
+* Import the folder client/Android/Studio in Android Studio
+* You are ready to go
+
+Building the APK (gradle)
+================
+
+* change to directory client/Android/Studio
+* run ./gradlew build to build
+* run ./gradlew tasks for other gradle options
+
+Building native libraries standalone (without Android Studio)
+=============================================================
+
+To build the native libraries for a specific ABI without Android Studio,
+run CMake directly from the project root:
+
+  cmake -S client/Android/Studio/freeRDPCore/src/main/cpp \
+        -B build/android-arm64 \
+        --toolchain $ANDROID_NDK/build/cmake/android.toolchain.cmake \
+        -DANDROID_ABI=arm64-v8a \
+        -DANDROID_PLATFORM=android-23 \
+        -DCMAKE_BUILD_TYPE=Release \
+        -GNinja
+  cmake --build build/android-arm64
+
+Supported ABIs: arm64-v8a, armeabi-v7a, x86_64, x86
+
+Set ANDROID_NDK to the absolute path of your NDK installation, e.g.:
+  export ANDROID_NDK=~/Android/Sdk/ndk/29.0.13113456
+
+Development
+===========
+
+Updating JNI
+------------
+
+Whenever the FreeRDP API changes or you need some extra functionality in your Java
+GUI the JNI needs to be updated.
+
+The JNI functions are defined in client/Android/android_freerdp.c
+Add the new functions to the methods struct.
+
+* edit client/Android/Studio/freeRDPCore/src/main/java/com/freerdp/freerdpcore/services/LibFreeRDP.java to
+  reflect your changes
+* edit client/Android/android_freerdp.c and adjust the methods struct to reflect
+  the changes made.
+
