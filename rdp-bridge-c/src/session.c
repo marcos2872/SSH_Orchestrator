@@ -342,9 +342,15 @@ static void* session_thread(void* arg) {
         }
 
         if (!freerdp_check_event_handles(instance->context)) {
-            if (freerdp_get_last_error(instance->context) == FREERDP_ERROR_SUCCESS)
-                fprintf(stderr, "[rdp-bridge] check_event_handles failed\n");
-            break;
+            if (freerdp_get_last_error(instance->context) != FREERDP_ERROR_SUCCESS) {
+                fprintf(stderr, "[rdp-bridge] check_event_handles failed with error 0x%08X\n",
+                        freerdp_get_last_error(instance->context));
+                break;
+            }
+            /* ERROR_SUCCESS = transição benigna (deactivate/reactivate em resize) */
+            if (freerdp_shall_disconnect_context(instance->context)) {
+                break;
+            }
         }
 
         /* Process pending input commands */
