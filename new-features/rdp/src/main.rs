@@ -13,6 +13,7 @@ use std::io::Write as _;
 use std::net::TcpStream;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc as std_mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -27,11 +28,19 @@ use ironrdp::pdu::gcc::KeyboardType;
 use ironrdp::pdu::rdp::capability_sets::MajorPlatformType;
 use ironrdp::session::image::DecodedImage;
 use ironrdp::session::{ActiveStage, ActiveStageOutput};
+use ironrdp_cliprdr::backend::{ClipboardMessage, CliprdrBackend};
+use ironrdp_cliprdr::pdu::{
+    ClipboardFormat, ClipboardFormatId, ClipboardGeneralCapabilityFlags, FileContentsRequest,
+    FileContentsResponse, FormatDataRequest, FormatDataResponse, LockDataId,
+    OwnedFormatDataResponse,
+};
+use ironrdp_cliprdr::CliprdrClient;
+use ironrdp_core::impl_as_any;
 use ironrdp_pdu::rdp::capability_sets::client_codecs_capabilities;
 use ironrdp_pdu::rdp::client_info::{PerformanceFlags, TimezoneInfo};
 use sspi::network_client::reqwest_network_client::ReqwestNetworkClient;
 use tokio_rustls::rustls;
-use tracing::info;
+use tracing::{info, warn};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
@@ -49,16 +58,22 @@ fn main() -> anyhow::Result<()> {
     let config = parse_args()?;
     info!(host = %config.host, port = config.port, user = %config.username, "Iniciando POC RDP");
 
-    // 1. Conectar
+    // 1. Criar canal CLIPRDR para clipboard bidirecional
+    let (clip_tx, clip_rx) = std_mpsc::channel::<ClipboardMessage>();
+    let clipboard_backend = LinuxClipboard::new(clip_tx);
+    let cliprdr = CliprdrClient::new(Box::new(clipboard_backend));
+
+    // 2. Conectar (com CLIPRDR registrado)
     let connector_config = build_connector_config(&config)?;
     let (connection_result, framed) =
-        connect(connector_config, &config.host, config.port).context("falha na conexao RDP")?;
+        connect(connector_config, &config.host, config.port, cliprdr)
+            .context("falha na conexao RDP")?;
 
     let width = connection_result.desktop_size.width as usize;
     let height = connection_result.desktop_size.height as usize;
     info!(width, height, "Conectado! Abrindo janela...");
 
-    // 2. Criar event loop e proxy para waker
+    // 3. Criar event loop e proxy para waker
     let event_loop = EventLoop::<UserEvent>::with_user_event()
         .build()
         .context("falha ao criar event loop")?;
@@ -66,32 +81,33 @@ fn main() -> anyhow::Result<()> {
 
     let proxy = event_loop.create_proxy();
 
-    // 3. Buffer de imagem — BgrX32 = bytes [B,G,R,X] -> u32 LE = 0x00RRGGBB
+    // 4. Buffer de imagem — BgrX32 = bytes [B,G,R,X] -> u32 LE = 0x00RRGGBB
     let image = DecodedImage::new(
         ironrdp_graphics::image_processing::PixelFormat::BgrX32,
         connection_result.desktop_size.width,
         connection_result.desktop_size.height,
     );
 
-    // 4. Shared state
+    // 5. Shared state
     let buffer = Arc::new(Mutex::new(vec![0u32; width * height]));
     let frame_ready = Arc::new(AtomicBool::new(false));
     let running = Arc::new(AtomicBool::new(true));
     let (input_tx, input_rx) = std::sync::mpsc::channel::<InputMsg>();
 
-    // 5. Spawn network thread
+    // 6. Spawn network thread (com clipboard receiver)
     let network_thread = spawn_network_thread(
         connection_result,
         framed,
         image,
         input_rx,
+        clip_rx,
         Arc::clone(&buffer),
         Arc::clone(&frame_ready),
         Arc::clone(&running),
         proxy.clone(),
     );
 
-    // 6. Criar app e rodar
+    // 7. Criar app e rodar
     let mut app = App {
         width: width as u32,
         height: height as u32,
@@ -357,6 +373,7 @@ fn spawn_network_thread(
     mut framed: UpgradedFramed,
     mut image: DecodedImage,
     input_rx: std::sync::mpsc::Receiver<InputMsg>,
+    clip_rx: std_mpsc::Receiver<ClipboardMessage>,
     buffer: Arc<Mutex<Vec<u32>>>,
     frame_ready: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
@@ -374,6 +391,11 @@ fn spawn_network_thread(
             .ok();
 
         let mut last_input_time: Option<std::time::Instant> = None;
+
+        // Monitoramento de clipboard local — detectar mudancas e anunciar via CLIPRDR
+        let mut last_clipboard_hash: u64 = 0;
+        let mut last_clipboard_check = std::time::Instant::now();
+        const CLIPBOARD_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
         while running.load(Ordering::Relaxed) {
             // 1. Processar TODO input pendente com prioridade maxima
@@ -417,6 +439,11 @@ fn spawn_network_thread(
                 }
             }
 
+            // 1b. Processar mensagens CLIPRDR do backend
+            while let Ok(clip_msg) = clip_rx.try_recv() {
+                process_clipboard_message(&mut active_stage, &mut framed, clip_msg)?;
+            }
+
             // Se teve input, flush imediato do socket para minimizar latencia
             if had_input {
                 framed.get_inner_mut().0.flush()?;
@@ -456,6 +483,15 @@ fn spawn_network_thread(
                                 }
                                 _ => {}
                             }
+                        }
+
+                        // Processar mensagens CLIPRDR que podem ter sido geradas pelo process()
+                        while let Ok(clip_msg) = clip_rx.try_recv() {
+                            process_clipboard_message(
+                                &mut active_stage,
+                                &mut framed,
+                                clip_msg,
+                            )?;
                         }
                     }
                     Err(e)
@@ -521,10 +557,105 @@ fn spawn_network_thread(
                 // Nenhum dado — sleep curto e previsivel
                 thread::sleep(Duration::from_micros(100));
             }
+
+            // 4. Monitorar clipboard local — anunciar mudancas ao servidor
+            if last_clipboard_check.elapsed() >= CLIPBOARD_POLL_INTERVAL {
+                last_clipboard_check = std::time::Instant::now();
+                if let Ok(text) = read_system_clipboard() {
+                    let hash = simple_hash(&text);
+                    if hash != last_clipboard_hash && !text.is_empty() {
+                        last_clipboard_hash = hash;
+                        // Anunciar ao servidor que temos novo conteudo
+                        let cliprdr = active_stage.get_svc_processor_mut::<CliprdrClient>();
+                        if let Some(cliprdr) = cliprdr {
+                            let formats =
+                                vec![ClipboardFormat::new(ClipboardFormatId::CF_UNICODETEXT)];
+                            match cliprdr.initiate_copy(&formats) {
+                                Ok(messages) => {
+                                    match active_stage.process_svc_processor_messages(messages) {
+                                        Ok(encoded) if !encoded.is_empty() => {
+                                            let _ = framed.write_all(&encoded);
+                                            let _ = framed.get_inner_mut().0.flush();
+                                            tracing::debug!("CLIPRDR: anunciou clipboard local");
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::debug!("CLIPRDR initiate_copy erro: {e}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
     })
+}
+
+/// Processa uma ClipboardMessage do backend CLIPRDR, gerando e enviando os PDUs necessarios.
+fn process_clipboard_message(
+    active_stage: &mut ActiveStage,
+    framed: &mut UpgradedFramed,
+    msg: ClipboardMessage,
+) -> anyhow::Result<()> {
+    match msg {
+        ClipboardMessage::SendInitiateCopy(formats) => {
+            let cliprdr = active_stage
+                .get_svc_processor_mut::<CliprdrClient>()
+                .context("CLIPRDR processor nao encontrado")?;
+            let messages = cliprdr
+                .initiate_copy(&formats)
+                .map_err(|e| anyhow::anyhow!("CLIPRDR initiate_copy: {e}"))?;
+            let encoded = active_stage
+                .process_svc_processor_messages(messages)
+                .map_err(|e| anyhow::anyhow!("CLIPRDR encode: {e}"))?;
+            if !encoded.is_empty() {
+                framed.write_all(&encoded)?;
+                framed.get_inner_mut().0.flush()?;
+            }
+        }
+        ClipboardMessage::SendInitiatePaste(format_id) => {
+            let cliprdr = active_stage
+                .get_svc_processor_mut::<CliprdrClient>()
+                .context("CLIPRDR processor nao encontrado")?;
+            let messages = cliprdr
+                .initiate_paste(format_id)
+                .map_err(|e| anyhow::anyhow!("CLIPRDR initiate_paste: {e}"))?;
+            let encoded = active_stage
+                .process_svc_processor_messages(messages)
+                .map_err(|e| anyhow::anyhow!("CLIPRDR encode: {e}"))?;
+            if !encoded.is_empty() {
+                framed.write_all(&encoded)?;
+                framed.get_inner_mut().0.flush()?;
+            }
+        }
+        ClipboardMessage::SendFormatData(response) => {
+            let cliprdr = active_stage
+                .get_svc_processor_mut::<CliprdrClient>()
+                .context("CLIPRDR processor nao encontrado")?;
+            let messages = cliprdr
+                .submit_format_data(response)
+                .map_err(|e| anyhow::anyhow!("CLIPRDR submit_format_data: {e}"))?;
+            let encoded = active_stage
+                .process_svc_processor_messages(messages)
+                .map_err(|e| anyhow::anyhow!("CLIPRDR encode: {e}"))?;
+            if !encoded.is_empty() {
+                framed.write_all(&encoded)?;
+                framed.get_inner_mut().0.flush()?;
+            }
+        }
+        ClipboardMessage::SendFileContentsRequest(_)
+        | ClipboardMessage::SendFileContentsResponse(_) => {
+            // File transfer nao suportado neste POC
+        }
+        ClipboardMessage::Error(e) => {
+            warn!("CLIPRDR error: {e:?}");
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -571,6 +702,194 @@ fn read_system_clipboard() -> anyhow::Result<String> {
     }
 
     anyhow::bail!("nenhum comando de clipboard disponivel (wl-paste, xclip, xsel)")
+}
+
+fn write_system_clipboard(text: &str) {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    // 1. Tentar wl-copy (Wayland)
+    if let Ok(mut child) = Command::new("wl-copy")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        if child.wait().map(|s| s.success()).unwrap_or(false) {
+            return;
+        }
+    }
+
+    // 2. Tentar xclip (X11)
+    if let Ok(mut child) = Command::new("xclip")
+        .args(["-selection", "clipboard"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+        return;
+    }
+
+    // 3. Tentar xsel (X11 alternativo)
+    if let Ok(mut child) = Command::new("xsel")
+        .args(["--clipboard", "--input"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+    }
+}
+
+/// Hash simples (FNV-1a) para detectar mudancas no clipboard sem comparar strings inteiras.
+fn simple_hash(s: &str) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in s.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+// ---------------------------------------------------------------------------
+// CLIPRDR Backend — implementa CliprdrBackend para clipboard bidirecional
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+struct LinuxClipboard {
+    clip_tx: std_mpsc::Sender<ClipboardMessage>,
+}
+
+impl_as_any!(LinuxClipboard);
+
+impl LinuxClipboard {
+    fn new(clip_tx: std_mpsc::Sender<ClipboardMessage>) -> Self {
+        Self { clip_tx }
+    }
+
+    fn send(&self, msg: ClipboardMessage) {
+        if self.clip_tx.send(msg).is_err() {
+            warn!("CLIPRDR: falha ao enviar mensagem (canal fechado)");
+        }
+    }
+}
+
+impl CliprdrBackend for LinuxClipboard {
+    fn temporary_directory(&self) -> &str {
+        "/tmp"
+    }
+
+    fn client_capabilities(&self) -> ClipboardGeneralCapabilityFlags {
+        ClipboardGeneralCapabilityFlags::USE_LONG_FORMAT_NAMES
+    }
+
+    fn on_ready(&mut self) {
+        info!("CLIPRDR: canal pronto");
+        // Anunciar clipboard local se houver conteudo
+        if let Ok(text) = read_system_clipboard() {
+            if !text.is_empty() {
+                let formats = vec![ClipboardFormat::new(ClipboardFormatId::CF_UNICODETEXT)];
+                self.send(ClipboardMessage::SendInitiateCopy(formats));
+            }
+        }
+    }
+
+    fn on_request_format_list(&mut self) {
+        info!("CLIPRDR: servidor pediu format list");
+        if let Ok(text) = read_system_clipboard() {
+            if !text.is_empty() {
+                let formats = vec![ClipboardFormat::new(ClipboardFormatId::CF_UNICODETEXT)];
+                self.send(ClipboardMessage::SendInitiateCopy(formats));
+            }
+        }
+    }
+
+    fn on_process_negotiated_capabilities(&mut self, caps: ClipboardGeneralCapabilityFlags) {
+        info!(?caps, "CLIPRDR: capacidades negociadas");
+    }
+
+    fn on_remote_copy(&mut self, available_formats: &[ClipboardFormat]) {
+        // Servidor copiou algo — solicitar paste do formato texto
+        info!(formats = ?available_formats, "CLIPRDR: remote copy detectado");
+        for fmt in available_formats {
+            if fmt.id() == ClipboardFormatId::CF_UNICODETEXT {
+                self.send(ClipboardMessage::SendInitiatePaste(
+                    ClipboardFormatId::CF_UNICODETEXT,
+                ));
+                return;
+            }
+        }
+        // Fallback para CF_TEXT
+        for fmt in available_formats {
+            if fmt.id() == ClipboardFormatId::CF_TEXT {
+                self.send(ClipboardMessage::SendInitiatePaste(
+                    ClipboardFormatId::CF_TEXT,
+                ));
+                return;
+            }
+        }
+    }
+
+    fn on_format_data_request(&mut self, request: FormatDataRequest) {
+        // Servidor quer nosso clipboard
+        info!(?request, "CLIPRDR: servidor pediu dados do clipboard");
+        let text = read_system_clipboard().unwrap_or_default();
+        let data = if request.format == ClipboardFormatId::CF_UNICODETEXT {
+            // Codificar como UTF-16LE com null terminator
+            let utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+            utf16.iter().flat_map(|&c| c.to_le_bytes()).collect()
+        } else {
+            // CF_TEXT — ASCII/Latin-1
+            let mut bytes = text.into_bytes();
+            bytes.push(0);
+            bytes
+        };
+        let response = OwnedFormatDataResponse::new_data(data);
+        self.send(ClipboardMessage::SendFormatData(response));
+    }
+
+    fn on_format_data_response(&mut self, response: FormatDataResponse<'_>) {
+        // Recebemos dados do clipboard remoto
+        if response.is_error() {
+            warn!("CLIPRDR: resposta de formato com erro");
+            return;
+        }
+        let data = response.data();
+        // Decodificar UTF-16LE
+        let utf16: Vec<u16> = data
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        let text = String::from_utf16_lossy(&utf16)
+            .trim_end_matches('\0')
+            .to_owned();
+        if !text.is_empty() {
+            write_system_clipboard(&text);
+            info!(len = text.len(), "CLIPRDR: clipboard remoto copiado para local");
+        }
+    }
+
+    fn on_file_contents_request(&mut self, _request: FileContentsRequest) {
+        // Nao suportamos transferencia de arquivos neste POC
+    }
+
+    fn on_file_contents_response(&mut self, _response: FileContentsResponse<'_>) {}
+
+    fn on_lock(&mut self, _data_id: LockDataId) {}
+
+    fn on_unlock(&mut self, _data_id: LockDataId) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -752,6 +1071,7 @@ fn connect(
     config: connector::Config,
     server_name: &str,
     port: u16,
+    cliprdr: CliprdrClient,
 ) -> anyhow::Result<(ConnectionResult, UpgradedFramed)> {
     use std::net::ToSocketAddrs as _;
 
@@ -770,6 +1090,10 @@ fn connect(
     let client_addr = tcp_stream.local_addr()?;
     let mut framed = ironrdp_blocking::Framed::new(tcp_stream);
     let mut connector = ClientConnector::new(config, client_addr);
+
+    // Registrar canal CLIPRDR para clipboard bidirecional
+    connector.attach_static_channel(cliprdr);
+    info!("CLIPRDR: canal registrado no connector");
 
     let should_upgrade = ironrdp_blocking::connect_begin(&mut framed, &mut connector)
         .context("falha no connect_begin (negociacao X.224)")?;

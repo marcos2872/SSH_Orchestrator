@@ -4,10 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ironrdp = { version = "0.15", features = ["session", "connector", "graphics", "input"] }
+ironrdp = { version = "0.15", features = ["session", "connector", "graphics", "input", "cliprdr", "svc"] }
 ironrdp-blocking = "0.9"
 ironrdp-pdu = "0.8"
 ironrdp-graphics = "0.8"
+ironrdp-cliprdr = "0.6"
+ironrdp-svc = "0.6"
+ironrdp-core = "0.2"
 anyhow = "1"
 x509-cert = { version = "0.2", default-features = false, features = ["std"] }
 sspi = { version = "0.21", features = ["network_client"] }
