@@ -17,7 +17,7 @@ use std::thread;
 
 use anyhow::Context as _;
 use ironrdp::connector::{self, BitmapConfig, ClientConnector, ConnectionResult, Credentials, DesktopSize};
-use ironrdp::input::{Database as InputDatabase, MouseButton, MousePosition, Operation, Scancode};
+use ironrdp::input::{Database as InputDatabase, MouseButton, MousePosition, Operation, Scancode, WheelRotations};
 use ironrdp::pdu::gcc::KeyboardType;
 use ironrdp::pdu::rdp::capability_sets::MajorPlatformType;
 use ironrdp::session::image::DecodedImage;
@@ -63,9 +63,9 @@ fn main() -> anyhow::Result<()> {
     // Poll de input a ~1000Hz sem busy-spin
     window.set_target_fps(1000);
 
-    // 3. Buffer de imagem
+    // 3. Buffer de imagem — BgrX32 = bytes [B,G,R,X] → u32 LE = 0x00RRGGBB (formato minifb)
     let image = DecodedImage::new(
-        ironrdp_graphics::image_processing::PixelFormat::RgbA32,
+        ironrdp_graphics::image_processing::PixelFormat::BgrX32,
         connection_result.desktop_size.width,
         connection_result.desktop_size.height,
     );
@@ -124,6 +124,8 @@ fn run_session(
             .set_read_timeout(Some(Duration::from_micros(500)))
             .ok();
 
+        let mut last_input_time: Option<std::time::Instant> = None;
+
         while running_clone.load(Ordering::Relaxed) {
             // 1. Processar TODO input pendente com prioridade maxima
             let mut had_input = false;
@@ -146,11 +148,13 @@ fn run_session(
             // Se teve input, flush imediato do socket para minimizar latencia
             if had_input {
                 framed.get_inner_mut().0.flush()?;
+                last_input_time = Some(std::time::Instant::now());
             }
 
-            // 2. Ler PDUs do servidor em batch (ate 50 por ciclo)
+            // 2. Ler PDUs do servidor (sem limite — drenar tudo disponivel)
             let mut has_update = false;
-            for _ in 0..50 {
+            let mut needs_flush = false;
+            loop {
                 match framed.read_pdu() {
                     Ok((action, payload)) => {
                         let outputs = active_stage.process(&mut image, action, &payload)?;
@@ -158,8 +162,15 @@ fn run_session(
                             match out {
                                 ActiveStageOutput::ResponseFrame(frame) => {
                                     framed.write_all(&frame)?;
+                                    needs_flush = true;
                                 }
                                 ActiveStageOutput::GraphicsUpdate(_) => {
+                                    if let Some(t) = last_input_time.take() {
+                                        let elapsed = t.elapsed();
+                                        if elapsed.as_millis() > 50 {
+                                            tracing::debug!("input→frame latency: {:?}", elapsed);
+                                        }
+                                    }
                                     has_update = true;
                                 }
                                 ActiveStageOutput::Terminate(reason) => {
@@ -192,19 +203,25 @@ fn run_session(
                             for out in outputs {
                                 if let ActiveStageOutput::ResponseFrame(frame) = out {
                                     framed.write_all(&frame)?;
+                                    needs_flush = true;
                                 }
                             }
-                            framed.get_inner_mut().0.flush()?;
                         }
                         InputMsg::Quit => return Ok(()),
                     }
                 }
             }
 
+            // Flush ACKs e respostas para o servidor — CRITICO para latencia!
+            // Servidor espera ACK antes de enviar proximo frame.
+            if needs_flush {
+                framed.get_inner_mut().0.flush()?;
+            }
+
             // 3. Atualizar buffer e sinalizar frame pronto
             if has_update {
                 if let Ok(mut buf) = buf_clone.try_lock() {
-                    rgba_to_argb32(&image, &mut buf);
+                     copy_xrgb32_to_buffer(&image, &mut buf);
                     ready_clone.store(true, Ordering::Release);
                 }
             } else if !had_input {
@@ -260,20 +277,26 @@ fn run_session(
 // Conversao RGBA → u32 (0RGB para minifb)
 // ---------------------------------------------------------------------------
 
-fn rgba_to_argb32(image: &DecodedImage, out: &mut [u32]) {
+/// Copia imagem XRgb32 direto para buffer u32 do minifb (formato identico).
+/// Apenas copia row-by-row respeitando stride.
+fn copy_xrgb32_to_buffer(image: &DecodedImage, out: &mut [u32]) {
     let width = image.width() as usize;
     let height = image.height() as usize;
     let stride = image.stride();
     let data = image.data();
 
-    for y in 0..height {
-        let row_start = y * stride;
-        for x in 0..width {
-            let offset = row_start + x * 4;
-            let r = data[offset] as u32;
-            let g = data[offset + 1] as u32;
-            let b = data[offset + 2] as u32;
-            out[y * width + x] = (r << 16) | (g << 8) | b;
+    if stride == width * 4 {
+        // Stride alinhado — copia direta via cast
+        let src = unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u32, width * height) };
+        out[..width * height].copy_from_slice(src);
+    } else {
+        // Stride com padding — copia row por row
+        for y in 0..height {
+            let row_start = y * stride;
+            let src = unsafe {
+                std::slice::from_raw_parts(data[row_start..].as_ptr() as *const u32, width)
+            };
+            out[y * width..(y + 1) * width].copy_from_slice(src);
         }
     }
 }
@@ -317,6 +340,22 @@ fn capture_mouse(
 
     *prev_left = left_down;
     *prev_right = right_down;
+
+    // Scroll wheel
+    if let Some((scroll_x, scroll_y)) = window.get_scroll_wheel() {
+        if scroll_y.abs() > 0.01 {
+            ops.push(Operation::WheelRotations(WheelRotations {
+                is_vertical: true,
+                rotation_units: (scroll_y * 120.0) as i16,
+            }));
+        }
+        if scroll_x.abs() > 0.01 {
+            ops.push(Operation::WheelRotations(WheelRotations {
+                is_vertical: false,
+                rotation_units: (scroll_x * 120.0) as i16,
+            }));
+        }
+    }
 
     ops
 }
@@ -577,8 +616,8 @@ fn build_connector_config(config: &CliConfig) -> anyhow::Result<connector::Confi
         ime_file_name: String::new(),
         dig_product_id: String::new(),
         desktop_size: DesktopSize {
-            width: 1280,
-            height: 720,
+            width: config.width,
+            height: config.height,
         },
         bitmap: Some(BitmapConfig {
             lossy_compression: true,
@@ -620,6 +659,8 @@ struct CliConfig {
     username: String,
     password: String,
     domain: Option<String>,
+    width: u16,
+    height: u16,
 }
 
 fn parse_args() -> anyhow::Result<CliConfig> {
@@ -630,6 +671,8 @@ fn parse_args() -> anyhow::Result<CliConfig> {
     let mut username = None;
     let mut password = None;
     let mut domain = None;
+    let mut width: u16 = 1280;
+    let mut height: u16 = 720;
 
     let mut i = 1;
     while i < args.len() {
@@ -654,8 +697,18 @@ fn parse_args() -> anyhow::Result<CliConfig> {
                 domain = Some(args.get(i + 1).context("-d requer valor")?.clone());
                 i += 2;
             }
+            "--size" => {
+                let val = args.get(i + 1).context("--size requer valor WxH (ex: 800x600)")?;
+                let parts: Vec<&str> = val.split('x').collect();
+                if parts.len() != 2 {
+                    anyhow::bail!("--size formato: WxH (ex: 800x600)");
+                }
+                width = parts[0].parse().context("largura invalida")?;
+                height = parts[1].parse().context("altura invalida")?;
+                i += 2;
+            }
             other => anyhow::bail!(
-                "argumento desconhecido: {other}\n\nUso: cargo run -- --host <IP> -u <USER> -p <PASS> [--port 3389] [-d DOMAIN]"
+                "argumento desconhecido: {other}\n\nUso: cargo run -- --host <IP> -u <USER> -p <PASS> [--port 3389] [-d DOMAIN] [--size 1280x720]"
             ),
         }
     }
@@ -663,9 +716,11 @@ fn parse_args() -> anyhow::Result<CliConfig> {
     Ok(CliConfig {
         host: host.context("--host e obrigatorio")?,
         port,
-        username: username.context("-u/--username e obrigatorio")?,
-        password: password.context("-p/--password e obrigatorio")?,
+        username: username.context("-u e obrigatorio")?,
+        password: password.context("-p e obrigatorio")?,
         domain,
+        width,
+        height,
     })
 }
 
