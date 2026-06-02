@@ -11,6 +11,9 @@
 use core::time::Duration;
 use std::io::Write as _;
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use anyhow::Context as _;
 use ironrdp::connector::{self, BitmapConfig, ClientConnector, ConnectionResult, Credentials, DesktopSize};
@@ -57,121 +60,197 @@ fn main() -> anyhow::Result<()> {
     )
     .context("falha ao criar janela")?;
 
-    // Limitar a ~60fps para nao consumir CPU demais
-    window.set_target_fps(60);
+    // Poll de input a ~1000Hz sem busy-spin
+    window.set_target_fps(1000);
 
     // 3. Buffer de imagem
-    let mut image = DecodedImage::new(
+    let image = DecodedImage::new(
         ironrdp_graphics::image_processing::PixelFormat::RgbA32,
         connection_result.desktop_size.width,
         connection_result.desktop_size.height,
     );
 
-    // 4. Session loop interativo
-    run_session(connection_result, framed, &mut image, &mut window)?;
+    // 4. Session loop interativo (multi-thread)
+    run_session(connection_result, framed, image, &mut window)?;
 
     println!("[POC] Sessao encerrada.");
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Session loop interativo
+// Session loop — arquitetura multi-thread para baixa latencia
+//
+// Thread principal (render): janela minifb + captura de input + envia ops via channel
+// Thread de rede: le PDUs, processa graficos, envia input, atualiza framebuffer compartilhado
 // ---------------------------------------------------------------------------
+
+/// Mensagem de input enviada da thread de render para a thread de rede
+enum InputMsg {
+    Mouse(Vec<Operation>),
+    Keyboard(Vec<Operation>),
+    Quit,
+}
 
 fn run_session(
     connection_result: ConnectionResult,
     mut framed: UpgradedFramed,
-    image: &mut DecodedImage,
+    mut image: DecodedImage,
     window: &mut Window,
 ) -> anyhow::Result<()> {
-    let mut active_stage = ActiveStage::new(connection_result);
-    let mut input_db = InputDatabase::new();
-
     let width = image.width() as usize;
     let height = image.height() as usize;
 
-    // Buffer u32 para minifb (ARGB format)
-    let mut framebuffer: Vec<u32> = vec![0; width * height];
+    // Buffer unico compartilhado (render le via try_lock, rede escreve)
+    let buffer = Arc::new(Mutex::new(vec![0u32; width * height]));
+    let frame_ready = Arc::new(AtomicBool::new(false));
+    let running = Arc::new(AtomicBool::new(true));
 
-    // Estado anterior do mouse para detectar mudancas
+    // Channel para enviar input da thread de render → thread de rede
+    let (input_tx, input_rx) = std::sync::mpsc::channel::<InputMsg>();
+
+    // --- Thread de rede ---
+    let buf_clone = Arc::clone(&buffer);
+    let ready_clone = Arc::clone(&frame_ready);
+    let running_clone = Arc::clone(&running);
+
+    let network_thread = thread::spawn(move || -> anyhow::Result<()> {
+        let mut active_stage = ActiveStage::new(connection_result);
+        let mut input_db = InputDatabase::new();
+
+        // Timeout minimo para nao bloquear
+        let (stream, _) = framed.get_inner_mut();
+        stream
+            .sock
+            .set_read_timeout(Some(Duration::from_micros(500)))
+            .ok();
+
+        while running_clone.load(Ordering::Relaxed) {
+            // 1. Processar TODO input pendente com prioridade maxima
+            let mut had_input = false;
+            while let Ok(msg) = input_rx.try_recv() {
+                match msg {
+                    InputMsg::Mouse(ops) | InputMsg::Keyboard(ops) => {
+                        let events = input_db.apply(ops);
+                        let outputs = active_stage.process_fastpath_input(&mut image, &events)?;
+                        for out in outputs {
+                            if let ActiveStageOutput::ResponseFrame(frame) = out {
+                                framed.write_all(&frame)?;
+                            }
+                        }
+                        had_input = true;
+                    }
+                    InputMsg::Quit => return Ok(()),
+                }
+            }
+
+            // Se teve input, flush imediato do socket para minimizar latencia
+            if had_input {
+                framed.get_inner_mut().0.flush()?;
+            }
+
+            // 2. Ler PDUs do servidor em batch (ate 50 por ciclo)
+            let mut has_update = false;
+            for _ in 0..50 {
+                match framed.read_pdu() {
+                    Ok((action, payload)) => {
+                        let outputs = active_stage.process(&mut image, action, &payload)?;
+                        for out in outputs {
+                            match out {
+                                ActiveStageOutput::ResponseFrame(frame) => {
+                                    framed.write_all(&frame)?;
+                                }
+                                ActiveStageOutput::GraphicsUpdate(_) => {
+                                    has_update = true;
+                                }
+                                ActiveStageOutput::Terminate(reason) => {
+                                    println!("[POC] Servidor encerrou: {:?}", reason);
+                                    running_clone.store(false, Ordering::Relaxed);
+                                    return Ok(());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Err(e)
+                        if e.kind() == std::io::ErrorKind::WouldBlock
+                            || e.kind() == std::io::ErrorKind::TimedOut =>
+                    {
+                        break;
+                    }
+                    Err(e) => {
+                        running_clone.store(false, Ordering::Relaxed);
+                        return Err(anyhow::Error::new(e).context("erro lendo PDU"));
+                    }
+                }
+
+                // Checar input entre PDUs para nao criar starvation
+                if let Ok(msg) = input_rx.try_recv() {
+                    match msg {
+                        InputMsg::Mouse(ops) | InputMsg::Keyboard(ops) => {
+                            let events = input_db.apply(ops);
+                            let outputs = active_stage.process_fastpath_input(&mut image, &events)?;
+                            for out in outputs {
+                                if let ActiveStageOutput::ResponseFrame(frame) = out {
+                                    framed.write_all(&frame)?;
+                                }
+                            }
+                            framed.get_inner_mut().0.flush()?;
+                        }
+                        InputMsg::Quit => return Ok(()),
+                    }
+                }
+            }
+
+            // 3. Atualizar buffer e sinalizar frame pronto
+            if has_update {
+                if let Ok(mut buf) = buf_clone.try_lock() {
+                    rgba_to_argb32(&image, &mut buf);
+                    ready_clone.store(true, Ordering::Release);
+                }
+            } else if !had_input {
+                // Nenhum dado — yield minimo
+                thread::yield_now();
+            }
+        }
+
+        Ok(())
+    });
+
+    // --- Thread principal (render + input) ---
     let mut prev_mouse_pos: (f32, f32) = (0.0, 0.0);
     let mut prev_left_down = false;
     let mut prev_right_down = false;
-
-    // Teclas rastreadas para detectar press/release
     let mut prev_keys: Vec<Key> = Vec::new();
 
-    // Usar timeout curto no TCP para nao bloquear o loop de rendering
-    // (ja configurado na conexao com 5s, mas queremos mais rapido aqui)
-    set_nonblocking_timeout(&mut framed);
-
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        // --- 1. Ler PDUs do servidor (non-blocking via timeout curto) ---
-        let mut got_graphics_update = false;
-        loop {
-            // processa todos os PDUs disponiveis
-            match framed.read_pdu() {
-                Ok((action, payload)) => {
-                    let outputs = active_stage.process(image, action, &payload)?;
-                    for out in outputs {
-                        match out {
-                            ActiveStageOutput::ResponseFrame(frame) => {
-                                framed.write_all(&frame)?;
-                            }
-                            ActiveStageOutput::GraphicsUpdate(_) => {
-                                got_graphics_update = true;
-                            }
-                            ActiveStageOutput::Terminate(reason) => {
-                                println!("[POC] Servidor encerrou: {:?}", reason);
-                                return Ok(());
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                Err(e)
-                    if e.kind() == std::io::ErrorKind::WouldBlock
-                        || e.kind() == std::io::ErrorKind::TimedOut =>
-                {
-                    break;
-                }
-                Err(e) => return Err(anyhow::Error::new(e).context("erro lendo PDU")),
-            }
-        }
-
-        // --- 2. Atualizar framebuffer se houve update grafico ---
-        if got_graphics_update {
-            rgba_to_argb32(image, &mut framebuffer);
-        }
-
-        // --- 3. Renderizar na janela ---
-        window
-            .update_with_buffer(&framebuffer, width, height)
-            .context("falha ao atualizar janela")?;
-
-        // --- 4. Capturar mouse ---
+    while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
+        // 1. Capturar e enviar input ANTES de renderizar (prioridade)
         let mouse_ops = capture_mouse(window, &mut prev_mouse_pos, &mut prev_left_down, &mut prev_right_down);
         if !mouse_ops.is_empty() {
-            let events = input_db.apply(mouse_ops);
-            let outputs = active_stage.process_fastpath_input(image, &events)?;
-            for out in outputs {
-                if let ActiveStageOutput::ResponseFrame(frame) = out {
-                    framed.write_all(&frame)?;
-                }
-            }
+            let _ = input_tx.send(InputMsg::Mouse(mouse_ops));
         }
 
-        // --- 5. Capturar teclado ---
         let key_ops = capture_keyboard(window, &mut prev_keys);
         if !key_ops.is_empty() {
-            let events = input_db.apply(key_ops);
-            let outputs = active_stage.process_fastpath_input(image, &events)?;
-            for out in outputs {
-                if let ActiveStageOutput::ResponseFrame(frame) = out {
-                    framed.write_all(&frame)?;
-                }
-            }
+            let _ = input_tx.send(InputMsg::Keyboard(key_ops));
         }
+
+        // 2. Renderizar buffer (lock rapido — so leitura)
+        if frame_ready.swap(false, Ordering::Acquire) {
+            if let Ok(buf) = buffer.lock() {
+                window.update_with_buffer(&buf, width, height).unwrap_or(());
+            }
+        } else {
+            // Sem frame novo — update sem buffer para processar eventos de janela
+            window.update();
+        }
+    }
+
+    // Sinalizar encerramento
+    running.store(false, Ordering::Relaxed);
+    let _ = input_tx.send(InputMsg::Quit);
+
+    if let Err(e) = network_thread.join().unwrap_or(Ok(())) {
+        println!("[POC] Erro na thread de rede: {e}");
     }
 
     Ok(())
@@ -379,14 +458,6 @@ fn key_to_scancode(key: Key) -> Option<Scancode> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn set_nonblocking_timeout(framed: &mut UpgradedFramed) {
-    // Timeout curto (10ms) para que o loop nao bloqueie esperando PDUs
-    let (stream, _) = framed.get_inner_mut();
-    if let Err(e) = stream.sock.set_read_timeout(Some(Duration::from_millis(10))) {
-        tracing::warn!("Nao foi possivel ajustar read_timeout: {e}");
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Conexao RDP (TCP → TLS)
 // ---------------------------------------------------------------------------
@@ -408,6 +479,7 @@ fn connect(
     info!(%server_addr, "Conectando via TCP...");
     let tcp_stream = TcpStream::connect(server_addr).context("falha no TCP connect")?;
     tcp_stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    tcp_stream.set_nodelay(true).context("falha ao setar TCP_NODELAY")?;
 
     let client_addr = tcp_stream.local_addr()?;
     let mut framed = ironrdp_blocking::Framed::new(tcp_stream);
