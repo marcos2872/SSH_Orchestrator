@@ -1,4 +1,4 @@
-//! POC interativa — Cliente RDP com janela (minifb) + mouse + teclado.
+//! POC interativa — Cliente RDP com janela (winit + softbuffer) + mouse + teclado.
 //!
 //! # Uso
 //!
@@ -11,6 +11,7 @@
 use core::time::Duration;
 use std::io::Write as _;
 use std::net::TcpStream;
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -28,10 +29,15 @@ use ironrdp::session::image::DecodedImage;
 use ironrdp::session::{ActiveStage, ActiveStageOutput};
 use ironrdp_pdu::rdp::capability_sets::client_codecs_capabilities;
 use ironrdp_pdu::rdp::client_info::{PerformanceFlags, TimezoneInfo};
-use minifb::{Key, MouseMode, Window, WindowOptions};
 use sspi::network_client::reqwest_network_client::ReqwestNetworkClient;
 use tokio_rustls::rustls;
 use tracing::info;
+use winit::application::ApplicationHandler;
+use winit::dpi::LogicalSize;
+use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
+use winit::window::{Window, WindowAttributes, WindowId};
 
 // ---------------------------------------------------------------------------
 // Main
@@ -52,78 +58,290 @@ fn main() -> anyhow::Result<()> {
     let height = connection_result.desktop_size.height as usize;
     info!(width, height, "Conectado! Abrindo janela...");
 
-    // 2. Abrir janela
-    let mut window = Window::new(
-        &format!("RDP POC - {}@{}", config.username, config.host),
-        width,
-        height,
-        WindowOptions {
-            resize: false,
-            ..WindowOptions::default()
-        },
-    )
-    .context("falha ao criar janela")?;
+    // 2. Criar event loop e proxy para waker
+    let event_loop = EventLoop::<UserEvent>::with_user_event()
+        .build()
+        .context("falha ao criar event loop")?;
+    event_loop.set_control_flow(ControlFlow::Wait);
 
-    // Poll de input a ~1000Hz sem busy-spin
-    window.set_target_fps(1000);
+    let proxy = event_loop.create_proxy();
 
-    // 3. Buffer de imagem — BgrX32 = bytes [B,G,R,X] → u32 LE = 0x00RRGGBB (formato minifb)
+    // 3. Buffer de imagem — BgrX32 = bytes [B,G,R,X] -> u32 LE = 0x00RRGGBB
     let image = DecodedImage::new(
         ironrdp_graphics::image_processing::PixelFormat::BgrX32,
         connection_result.desktop_size.width,
         connection_result.desktop_size.height,
     );
 
-    // 4. Session loop interativo (multi-thread)
-    run_session(connection_result, framed, image, &mut window)?;
+    // 4. Shared state
+    let buffer = Arc::new(Mutex::new(vec![0u32; width * height]));
+    let frame_ready = Arc::new(AtomicBool::new(false));
+    let running = Arc::new(AtomicBool::new(true));
+    let (input_tx, input_rx) = std::sync::mpsc::channel::<InputMsg>();
+
+    // 5. Spawn network thread
+    let network_thread = spawn_network_thread(
+        connection_result,
+        framed,
+        image,
+        input_rx,
+        Arc::clone(&buffer),
+        Arc::clone(&frame_ready),
+        Arc::clone(&running),
+        proxy.clone(),
+    );
+
+    // 6. Criar app e rodar
+    let mut app = App {
+        width: width as u32,
+        height: height as u32,
+        window: None,
+        surface: None,
+        buffer: Arc::clone(&buffer),
+        frame_ready: Arc::clone(&frame_ready),
+        running: Arc::clone(&running),
+        input_tx,
+        modifiers: ModifiersState::empty(),
+        title: format!("RDP POC - {}@{}", config.username, config.host),
+        network_thread: Some(network_thread),
+    };
+
+    event_loop.run_app(&mut app).context("event loop error")?;
+
+    // Aguardar thread de rede
+    app.running.store(false, Ordering::Relaxed);
+    if let Some(handle) = app.network_thread.take() {
+        if let Err(e) = handle.join().unwrap_or(Ok(())) {
+            println!("[POC] Erro na thread de rede: {e}");
+        }
+    }
 
     println!("[POC] Sessao encerrada.");
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Session loop — arquitetura multi-thread para baixa latencia
-//
-// Thread principal (render): janela minifb + captura de input + envia ops via channel
-// Thread de rede: le PDUs, processa graficos, envia input, atualiza framebuffer compartilhado
+// User event (waker do network thread)
 // ---------------------------------------------------------------------------
 
-/// Mensagem de input enviada da thread de render para a thread de rede
+#[derive(Debug, Clone)]
+enum UserEvent {
+    FrameReady,
+}
+
+// ---------------------------------------------------------------------------
+// Input message (render thread -> network thread)
+// ---------------------------------------------------------------------------
+
 enum InputMsg {
     Mouse(Vec<Operation>),
     Keyboard(Vec<Operation>),
-    /// Colar texto da clipboard local via UnicodeKeyPressed (bypass CLIPRDR)
     ClipboardPaste(String),
     Quit,
 }
 
-fn run_session(
+// ---------------------------------------------------------------------------
+// App struct (ApplicationHandler)
+// ---------------------------------------------------------------------------
+
+struct App {
+    width: u32,
+    height: u32,
+    window: Option<Arc<Window>>,
+    surface: Option<softbuffer::Surface<Arc<Window>, Arc<Window>>>,
+    buffer: Arc<Mutex<Vec<u32>>>,
+    frame_ready: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
+    input_tx: std::sync::mpsc::Sender<InputMsg>,
+    modifiers: ModifiersState,
+    title: String,
+    network_thread: Option<thread::JoinHandle<anyhow::Result<()>>>,
+}
+
+impl ApplicationHandler<UserEvent> for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_some() {
+            return; // Ja criada
+        }
+
+        let attrs = WindowAttributes::default()
+            .with_title(&self.title)
+            .with_inner_size(LogicalSize::new(self.width, self.height))
+            .with_resizable(false);
+
+        let window = Arc::new(event_loop.create_window(attrs).expect("falha ao criar janela"));
+
+        let context =
+            softbuffer::Context::new(window.clone()).expect("falha ao criar softbuffer context");
+        let mut surface =
+            softbuffer::Surface::new(&context, window.clone()).expect("falha ao criar surface");
+
+        surface
+            .resize(
+                NonZeroU32::new(self.width).unwrap(),
+                NonZeroU32::new(self.height).unwrap(),
+            )
+            .expect("falha ao redimensionar surface");
+
+        self.surface = Some(surface);
+        self.window = Some(window);
+    }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+        match event {
+            UserEvent::FrameReady => {
+                if let Some(ref window) = self.window {
+                    window.request_redraw();
+                }
+            }
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        match event {
+            WindowEvent::CloseRequested => {
+                self.running.store(false, Ordering::Relaxed);
+                let _ = self.input_tx.send(InputMsg::Quit);
+                event_loop.exit();
+            }
+
+            WindowEvent::RedrawRequested => {
+                if self.frame_ready.swap(false, Ordering::Acquire) {
+                    if let (Some(surface), Ok(buf)) =
+                        (self.surface.as_mut(), self.buffer.lock())
+                    {
+                        if let Ok(mut sb) = surface.buffer_mut() {
+                            let len = buf.len().min(sb.len());
+                            sb[..len].copy_from_slice(&buf[..len]);
+                            sb.present().unwrap_or(());
+                        }
+                    }
+                }
+            }
+
+            WindowEvent::ModifiersChanged(mods) => {
+                self.modifiers = mods.state();
+            }
+
+            WindowEvent::KeyboardInput { event, .. } => {
+                // Ctrl+V: clipboard paste local
+                if self.modifiers.control_key()
+                    && event.physical_key == PhysicalKey::Code(KeyCode::KeyV)
+                    && event.state == ElementState::Pressed
+                    && !event.repeat
+                {
+                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                        if let Ok(text) = clipboard.get_text() {
+                            if !text.is_empty() {
+                                tracing::info!(len = text.len(), "Clipboard paste");
+                                let _ = self.input_tx.send(InputMsg::ClipboardPaste(text));
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                // Teclas normais: mapear para scancode
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    if let Some(sc) = keycode_to_scancode(code) {
+                        let op = match event.state {
+                            ElementState::Pressed => {
+                                if event.repeat {
+                                    return; // RDP nao precisa de repeat, server gera
+                                }
+                                tracing::debug!(?code, ?sc, "KeyPressed");
+                                Operation::KeyPressed(sc)
+                            }
+                            ElementState::Released => {
+                                tracing::debug!(?code, ?sc, "KeyReleased");
+                                Operation::KeyReleased(sc)
+                            }
+                        };
+                        let _ = self.input_tx.send(InputMsg::Keyboard(vec![op]));
+                    }
+                }
+            }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                let ops = vec![Operation::MouseMove(MousePosition {
+                    x: position.x as u16,
+                    y: position.y as u16,
+                })];
+                let _ = self.input_tx.send(InputMsg::Mouse(ops));
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                let btn = match button {
+                    winit::event::MouseButton::Left => MouseButton::Left,
+                    winit::event::MouseButton::Right => MouseButton::Right,
+                    winit::event::MouseButton::Middle => MouseButton::Middle,
+                    _ => return,
+                };
+                let op = match state {
+                    ElementState::Pressed => Operation::MouseButtonPressed(btn),
+                    ElementState::Released => Operation::MouseButtonReleased(btn),
+                };
+                let _ = self.input_tx.send(InputMsg::Mouse(vec![op]));
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                let (dx, dy) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (x, y),
+                    MouseScrollDelta::PixelDelta(pos) => {
+                        (pos.x as f32 / 10.0, pos.y as f32 / 10.0)
+                    }
+                };
+                let mut ops = Vec::new();
+                if dy.abs() > 0.01 {
+                    ops.push(Operation::WheelRotations(WheelRotations {
+                        is_vertical: true,
+                        rotation_units: (dy * 120.0) as i16,
+                    }));
+                }
+                if dx.abs() > 0.01 {
+                    ops.push(Operation::WheelRotations(WheelRotations {
+                        is_vertical: false,
+                        rotation_units: (dx * 120.0) as i16,
+                    }));
+                }
+                if !ops.is_empty() {
+                    let _ = self.input_tx.send(InputMsg::Mouse(ops));
+                }
+            }
+
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // Nada — usamos ControlFlow::Wait + UserEvent::FrameReady como waker
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Network thread
+// ---------------------------------------------------------------------------
+
+fn spawn_network_thread(
     connection_result: ConnectionResult,
     mut framed: UpgradedFramed,
     mut image: DecodedImage,
-    window: &mut Window,
-) -> anyhow::Result<()> {
-    let width = image.width() as usize;
-    let height = image.height() as usize;
-
-    // Buffer unico compartilhado (render le via try_lock, rede escreve)
-    let buffer = Arc::new(Mutex::new(vec![0u32; width * height]));
-    let frame_ready = Arc::new(AtomicBool::new(false));
-    let running = Arc::new(AtomicBool::new(true));
-
-    // Channel para enviar input da thread de render → thread de rede
-    let (input_tx, input_rx) = std::sync::mpsc::channel::<InputMsg>();
-
-    // --- Thread de rede ---
-    let buf_clone = Arc::clone(&buffer);
-    let ready_clone = Arc::clone(&frame_ready);
-    let running_clone = Arc::clone(&running);
-
-    let network_thread = thread::spawn(move || -> anyhow::Result<()> {
+    input_rx: std::sync::mpsc::Receiver<InputMsg>,
+    buffer: Arc<Mutex<Vec<u32>>>,
+    frame_ready: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
+    proxy: EventLoopProxy<UserEvent>,
+) -> thread::JoinHandle<anyhow::Result<()>> {
+    thread::spawn(move || -> anyhow::Result<()> {
         let mut active_stage = ActiveStage::new(connection_result);
         let mut input_db = InputDatabase::new();
 
-        // Timeout minimo para nao bloquear (100µs para reduzir latencia)
+        // Timeout minimo para nao bloquear (100us para reduzir latencia)
         let (stream, _) = framed.get_inner_mut();
         stream
             .sock
@@ -132,17 +350,19 @@ fn run_session(
 
         let mut last_input_time: Option<std::time::Instant> = None;
 
-        while running_clone.load(Ordering::Relaxed) {
+        while running.load(Ordering::Relaxed) {
             // 1. Processar TODO input pendente com prioridade maxima
             let mut had_input = false;
             while let Ok(msg) = input_rx.try_recv() {
                 match msg {
                     InputMsg::Mouse(ops) | InputMsg::Keyboard(ops) => {
                         let events = input_db.apply(ops);
-                        let outputs = active_stage.process_fastpath_input(&mut image, &events)?;
+                        let outputs =
+                            active_stage.process_fastpath_input(&mut image, &events)?;
                         for out in outputs {
                             if let ActiveStageOutput::ResponseFrame(frame) = out {
                                 framed.write_all(&frame)?;
+                                framed.get_inner_mut().0.flush()?;
                             }
                         }
                         had_input = true;
@@ -158,10 +378,12 @@ fn run_session(
                             })
                             .collect();
                         let events = input_db.apply(ops);
-                        let outputs = active_stage.process_fastpath_input(&mut image, &events)?;
+                        let outputs =
+                            active_stage.process_fastpath_input(&mut image, &events)?;
                         for out in outputs {
                             if let ActiveStageOutput::ResponseFrame(frame) = out {
                                 framed.write_all(&frame)?;
+                                framed.get_inner_mut().0.flush()?;
                             }
                         }
                         had_input = true;
@@ -176,7 +398,7 @@ fn run_session(
                 last_input_time = Some(std::time::Instant::now());
             }
 
-            // 2. Ler PDUs do servidor (sem limite — drenar tudo disponivel)
+            // 2. Ler PDUs do servidor (drenar tudo disponivel)
             let mut has_update = false;
             loop {
                 match framed.read_pdu() {
@@ -186,8 +408,7 @@ fn run_session(
                             match out {
                                 ActiveStageOutput::ResponseFrame(frame) => {
                                     // Flush ACK imediato — servidor espera ACK antes de
-                                    // enviar proximo frame, atrasar isso causa latencia
-                                    // em cascata.
+                                    // enviar proximo frame
                                     framed.write_all(&frame)?;
                                     framed.get_inner_mut().0.flush()?;
                                 }
@@ -195,14 +416,17 @@ fn run_session(
                                     if let Some(t) = last_input_time.take() {
                                         let elapsed = t.elapsed();
                                         if elapsed.as_millis() > 50 {
-                                            tracing::debug!("input→frame latency: {:?}", elapsed);
+                                            tracing::debug!(
+                                                "input->frame latency: {:?}",
+                                                elapsed
+                                            );
                                         }
                                     }
                                     has_update = true;
                                 }
                                 ActiveStageOutput::Terminate(reason) => {
                                     println!("[POC] Servidor encerrou: {:?}", reason);
-                                    running_clone.store(false, Ordering::Relaxed);
+                                    running.store(false, Ordering::Relaxed);
                                     return Ok(());
                                 }
                                 _ => {}
@@ -216,7 +440,7 @@ fn run_session(
                         break;
                     }
                     Err(e) => {
-                        running_clone.store(false, Ordering::Relaxed);
+                        running.store(false, Ordering::Relaxed);
                         return Err(anyhow::Error::new(e).context("erro lendo PDU"));
                     }
                 }
@@ -262,116 +486,27 @@ fn run_session(
 
             // 3. Atualizar buffer e sinalizar frame pronto
             if has_update {
-                if let Ok(mut buf) = buf_clone.try_lock() {
+                if let Ok(mut buf) = buffer.try_lock() {
                     copy_xrgb32_to_buffer(&image, &mut buf);
-                    ready_clone.store(true, Ordering::Release);
+                    frame_ready.store(true, Ordering::Release);
+                    // Acordar event loop para fazer redraw
+                    let _ = proxy.send_event(UserEvent::FrameReady);
                 }
             } else if !had_input {
-                // Nenhum dado — sleep curto e previsivel (yield depende do scheduler
-                // e pode causar delays de 1-15ms no Linux)
+                // Nenhum dado — sleep curto e previsivel
                 thread::sleep(Duration::from_micros(100));
             }
         }
 
         Ok(())
-    });
-
-    // --- Thread principal (render + input) ---
-    let mut prev_mouse_pos: (f32, f32) = (0.0, 0.0);
-    let mut prev_left_down = false;
-    let mut prev_right_down = false;
-    let mut prev_keys: Vec<Key> = Vec::new();
-
-    while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
-        // 0. Atualizar estado de janela/input (poll de eventos do OS)
-        if frame_ready.swap(false, Ordering::Acquire) {
-            if let Ok(buf) = buffer.lock() {
-                window.update_with_buffer(&buf, width, height).unwrap_or(());
-            }
-        } else {
-            window.update();
-        }
-
-        // 1. Capturar e enviar input DEPOIS do update (estado de teclas atualizado)
-        let mouse_ops = capture_mouse(
-            window,
-            &mut prev_mouse_pos,
-            &mut prev_left_down,
-            &mut prev_right_down,
-        );
-        if !mouse_ops.is_empty() {
-            let _ = input_tx.send(InputMsg::Mouse(mouse_ops));
-        }
-
-        // Clipboard paste: Ctrl+V interceptado localmente e envia como Unicode.
-        // Sem CLIPRDR, Ctrl+V remoto e inutil — usamos para colar clipboard local.
-        let current_keys: Vec<Key> = window.get_keys();
-        let has_ctrl = current_keys.contains(&Key::LeftCtrl) || current_keys.contains(&Key::RightCtrl);
-        let has_v = current_keys.contains(&Key::V);
-        let v_is_new = has_v && !prev_keys.contains(&Key::V);
-        let clipboard_paste = has_ctrl && v_is_new;
-
-        // Gerar key ops a partir das mesmas current_keys (evita segunda chamada get_keys)
-        let key_ops = {
-            let mut ops = Vec::new();
-            for key in &current_keys {
-                if !prev_keys.contains(key) {
-                    // Se clipboard paste ativo, nao enviar V nem Ctrl como scancode
-                    if clipboard_paste && (*key == Key::V) {
-                        continue;
-                    }
-                    if let Some(sc) = key_to_scancode(*key) {
-                        tracing::debug!(?key, ?sc, "KeyPressed");
-                        ops.push(Operation::KeyPressed(sc));
-                    }
-                }
-            }
-            for key in prev_keys.iter() {
-                if !current_keys.contains(key) {
-                    if let Some(sc) = key_to_scancode(*key) {
-                        tracing::debug!(?key, ?sc, "KeyReleased");
-                        ops.push(Operation::KeyReleased(sc));
-                    }
-                }
-            }
-            prev_keys = current_keys;
-            ops
-        };
-
-        if !key_ops.is_empty() && !clipboard_paste {
-            let _ = input_tx.send(InputMsg::Keyboard(key_ops));
-        }
-
-        if clipboard_paste {
-            tracing::info!("Clipboard paste detectado (Ctrl+V)!");
-            if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                if let Ok(text) = clipboard.get_text() {
-                    tracing::info!(len = text.len(), "Clipboard text lido");
-                    if !text.is_empty() {
-                        let _ = input_tx.send(InputMsg::ClipboardPaste(text));
-                    }
-                }
-            }
-        }
-    }
-
-    // Sinalizar encerramento
-    running.store(false, Ordering::Relaxed);
-    let _ = input_tx.send(InputMsg::Quit);
-
-    if let Err(e) = network_thread.join().unwrap_or(Ok(())) {
-        println!("[POC] Erro na thread de rede: {e}");
-    }
-
-    Ok(())
+    })
 }
 
 // ---------------------------------------------------------------------------
-// Conversao RGBA → u32 (0RGB para minifb)
+// Conversao RGBA -> u32 (0RGB para softbuffer)
 // ---------------------------------------------------------------------------
 
-/// Copia imagem XRgb32 direto para buffer u32 do minifb (formato identico).
-/// Apenas copia row-by-row respeitando stride.
+/// Copia imagem XRgb32 direto para buffer u32 (formato identico BgrX32 = 0x00RRGGBB).
 fn copy_xrgb32_to_buffer(image: &DecodedImage, out: &mut [u32]) {
     let width = image.width() as usize;
     let height = image.height() as usize;
@@ -380,8 +515,7 @@ fn copy_xrgb32_to_buffer(image: &DecodedImage, out: &mut [u32]) {
 
     if stride == width * 4 {
         // SAFETY: DecodedImage garante data.len() >= width * height * 4 quando stride == width*4.
-        // O ponteiro de u8 é reinterpretado como u32 (4 bytes por pixel, BgrX32).
-        // Alinhamento: data vem de Vec<u8> internamente; em x86_64 alocações são alinhadas a 16 bytes.
+        // O ponteiro de u8 e reinterpretado como u32 (4 bytes por pixel, BgrX32).
         let src =
             unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u32, width * height) };
         out[..width * height].copy_from_slice(src);
@@ -389,8 +523,7 @@ fn copy_xrgb32_to_buffer(image: &DecodedImage, out: &mut [u32]) {
         // Stride com padding — copia row por row
         for y in 0..height {
             let row_start = y * stride;
-            // SAFETY: Cada row tem pelo menos width*4 bytes válidos (stride >= width*4).
-            // Mesmo argumento de alinhamento acima.
+            // SAFETY: Cada row tem pelo menos width*4 bytes validos (stride >= width*4).
             let src = unsafe {
                 std::slice::from_raw_parts(data[row_start..].as_ptr() as *const u32, width)
             };
@@ -400,221 +533,145 @@ fn copy_xrgb32_to_buffer(image: &DecodedImage, out: &mut [u32]) {
 }
 
 // ---------------------------------------------------------------------------
-// Captura de mouse
+// Mapeamento KeyCode (winit) -> Scancode (RDP)
 // ---------------------------------------------------------------------------
 
-fn capture_mouse(
-    window: &Window,
-    prev_pos: &mut (f32, f32),
-    prev_left: &mut bool,
-    prev_right: &mut bool,
-) -> Vec<Operation> {
-    let mut ops = Vec::new();
-
-    if let Some((x, y)) = window.get_mouse_pos(MouseMode::Clamp) {
-        if (x - prev_pos.0).abs() > 0.5 || (y - prev_pos.1).abs() > 0.5 {
-            ops.push(Operation::MouseMove(MousePosition {
-                x: x as u16,
-                y: y as u16,
-            }));
-            *prev_pos = (x, y);
-        }
-    }
-
-    let left_down = window.get_mouse_down(minifb::MouseButton::Left);
-    let right_down = window.get_mouse_down(minifb::MouseButton::Right);
-
-    if left_down && !*prev_left {
-        ops.push(Operation::MouseButtonPressed(MouseButton::Left));
-    } else if !left_down && *prev_left {
-        ops.push(Operation::MouseButtonReleased(MouseButton::Left));
-    }
-
-    if right_down && !*prev_right {
-        ops.push(Operation::MouseButtonPressed(MouseButton::Right));
-    } else if !right_down && *prev_right {
-        ops.push(Operation::MouseButtonReleased(MouseButton::Right));
-    }
-
-    *prev_left = left_down;
-    *prev_right = right_down;
-
-    // Scroll wheel
-    if let Some((scroll_x, scroll_y)) = window.get_scroll_wheel() {
-        if scroll_y.abs() > 0.01 {
-            ops.push(Operation::WheelRotations(WheelRotations {
-                is_vertical: true,
-                rotation_units: (scroll_y * 120.0) as i16,
-            }));
-        }
-        if scroll_x.abs() > 0.01 {
-            ops.push(Operation::WheelRotations(WheelRotations {
-                is_vertical: false,
-                rotation_units: (scroll_x * 120.0) as i16,
-            }));
-        }
-    }
-
-    ops
-}
-
-// ---------------------------------------------------------------------------
-// Captura de teclado — mapeia minifb::Key → scancode
-// ---------------------------------------------------------------------------
-
-
-
-/// Mapeia minifb::Key para RDP Scancode (Set 1 / XT scancodes).
-/// Mapa completo incluindo Numpad, F13-F15, locks, Super, Menu, Pause.
-/// Acentos ABNT2: o servidor remoto faz a composicao de dead keys —
-/// basta enviar os scancodes fisicos corretos (Apostrophe = ´, Backquote = `,
-/// LeftBracket = ~^, Semicolon = ç no layout ABNT2).
-fn key_to_scancode(key: Key) -> Option<Scancode> {
+/// Mapeia winit KeyCode para RDP Scancode (Set 1 / XT scancodes).
+fn keycode_to_scancode(key: KeyCode) -> Option<Scancode> {
     let (extended, code) = match key {
         // Linha numerica
-        Key::Key1 => (false, 0x02),
-        Key::Key2 => (false, 0x03),
-        Key::Key3 => (false, 0x04),
-        Key::Key4 => (false, 0x05),
-        Key::Key5 => (false, 0x06),
-        Key::Key6 => (false, 0x07),
-        Key::Key7 => (false, 0x08),
-        Key::Key8 => (false, 0x09),
-        Key::Key9 => (false, 0x0A),
-        Key::Key0 => (false, 0x0B),
+        KeyCode::Digit1 => (false, 0x02),
+        KeyCode::Digit2 => (false, 0x03),
+        KeyCode::Digit3 => (false, 0x04),
+        KeyCode::Digit4 => (false, 0x05),
+        KeyCode::Digit5 => (false, 0x06),
+        KeyCode::Digit6 => (false, 0x07),
+        KeyCode::Digit7 => (false, 0x08),
+        KeyCode::Digit8 => (false, 0x09),
+        KeyCode::Digit9 => (false, 0x0A),
+        KeyCode::Digit0 => (false, 0x0B),
 
         // Letras
-        Key::A => (false, 0x1E),
-        Key::B => (false, 0x30),
-        Key::C => (false, 0x2E),
-        Key::D => (false, 0x20),
-        Key::E => (false, 0x12),
-        Key::F => (false, 0x21),
-        Key::G => (false, 0x22),
-        Key::H => (false, 0x23),
-        Key::I => (false, 0x17),
-        Key::J => (false, 0x24),
-        Key::K => (false, 0x25),
-        Key::L => (false, 0x26),
-        Key::M => (false, 0x32),
-        Key::N => (false, 0x31),
-        Key::O => (false, 0x18),
-        Key::P => (false, 0x19),
-        Key::Q => (false, 0x10),
-        Key::R => (false, 0x13),
-        Key::S => (false, 0x1F),
-        Key::T => (false, 0x14),
-        Key::U => (false, 0x16),
-        Key::V => (false, 0x2F),
-        Key::W => (false, 0x11),
-        Key::X => (false, 0x2D),
-        Key::Y => (false, 0x15),
-        Key::Z => (false, 0x2C),
+        KeyCode::KeyA => (false, 0x1E),
+        KeyCode::KeyB => (false, 0x30),
+        KeyCode::KeyC => (false, 0x2E),
+        KeyCode::KeyD => (false, 0x20),
+        KeyCode::KeyE => (false, 0x12),
+        KeyCode::KeyF => (false, 0x21),
+        KeyCode::KeyG => (false, 0x22),
+        KeyCode::KeyH => (false, 0x23),
+        KeyCode::KeyI => (false, 0x17),
+        KeyCode::KeyJ => (false, 0x24),
+        KeyCode::KeyK => (false, 0x25),
+        KeyCode::KeyL => (false, 0x26),
+        KeyCode::KeyM => (false, 0x32),
+        KeyCode::KeyN => (false, 0x31),
+        KeyCode::KeyO => (false, 0x18),
+        KeyCode::KeyP => (false, 0x19),
+        KeyCode::KeyQ => (false, 0x10),
+        KeyCode::KeyR => (false, 0x13),
+        KeyCode::KeyS => (false, 0x1F),
+        KeyCode::KeyT => (false, 0x14),
+        KeyCode::KeyU => (false, 0x16),
+        KeyCode::KeyV => (false, 0x2F),
+        KeyCode::KeyW => (false, 0x11),
+        KeyCode::KeyX => (false, 0x2D),
+        KeyCode::KeyY => (false, 0x15),
+        KeyCode::KeyZ => (false, 0x2C),
 
         // Modificadores
-        Key::LeftShift => (false, 0x2A),
-        Key::RightShift => (false, 0x36),
-        Key::LeftCtrl => (false, 0x1D),
-        Key::RightCtrl => (true, 0x1D),
-        Key::LeftAlt => (false, 0x38),
-        Key::RightAlt => (true, 0x38), // AltGr no ABNT2
-        Key::LeftSuper => (true, 0x5B),
-        Key::RightSuper => (true, 0x5C),
+        KeyCode::ShiftLeft => (false, 0x2A),
+        KeyCode::ShiftRight => (false, 0x36),
+        KeyCode::ControlLeft => (false, 0x1D),
+        KeyCode::ControlRight => (true, 0x1D),
+        KeyCode::AltLeft => (false, 0x38),
+        KeyCode::AltRight => (true, 0x38), // AltGr no ABNT2
+        KeyCode::SuperLeft => (true, 0x5B),
+        KeyCode::SuperRight => (true, 0x5C),
 
         // Locks
-        Key::CapsLock => (false, 0x3A),
-        Key::NumLock => (false, 0x45),
-        Key::ScrollLock => (false, 0x46),
+        KeyCode::CapsLock => (false, 0x3A),
+        KeyCode::NumLock => (false, 0x45),
+        KeyCode::ScrollLock => (false, 0x46),
 
         // Teclas especiais
-        Key::Space => (false, 0x39),
-        Key::Enter => (false, 0x1C),
-        Key::Backspace => (false, 0x0E),
-        Key::Tab => (false, 0x0F),
-        Key::Escape => (false, 0x01),
-        Key::Menu => (true, 0x5D),
-        Key::Pause => (false, 0x45), // Pause/Break (scancode especial)
+        KeyCode::Space => (false, 0x39),
+        KeyCode::Enter => (false, 0x1C),
+        KeyCode::Backspace => (false, 0x0E),
+        KeyCode::Tab => (false, 0x0F),
+        KeyCode::Escape => (false, 0x01),
+        KeyCode::ContextMenu => (true, 0x5D),
+        KeyCode::Pause => (false, 0x45),
 
         // Function keys
-        Key::F1 => (false, 0x3B),
-        Key::F2 => (false, 0x3C),
-        Key::F3 => (false, 0x3D),
-        Key::F4 => (false, 0x3E),
-        Key::F5 => (false, 0x3F),
-        Key::F6 => (false, 0x40),
-        Key::F7 => (false, 0x41),
-        Key::F8 => (false, 0x42),
-        Key::F9 => (false, 0x43),
-        Key::F10 => (false, 0x44),
-        Key::F11 => (false, 0x57),
-        Key::F12 => (false, 0x58),
-        Key::F13 => (false, 0x64),
-        Key::F14 => (false, 0x65),
-        Key::F15 => (false, 0x66),
+        KeyCode::F1 => (false, 0x3B),
+        KeyCode::F2 => (false, 0x3C),
+        KeyCode::F3 => (false, 0x3D),
+        KeyCode::F4 => (false, 0x3E),
+        KeyCode::F5 => (false, 0x3F),
+        KeyCode::F6 => (false, 0x40),
+        KeyCode::F7 => (false, 0x41),
+        KeyCode::F8 => (false, 0x42),
+        KeyCode::F9 => (false, 0x43),
+        KeyCode::F10 => (false, 0x44),
+        KeyCode::F11 => (false, 0x57),
+        KeyCode::F12 => (false, 0x58),
+        KeyCode::F13 => (false, 0x64),
+        KeyCode::F14 => (false, 0x65),
+        KeyCode::F15 => (false, 0x66),
 
         // Navegacao (extended)
-        Key::Up => (true, 0x48),
-        Key::Down => (true, 0x50),
-        Key::Left => (true, 0x4B),
-        Key::Right => (true, 0x4D),
-        Key::Home => (true, 0x47),
-        Key::End => (true, 0x4F),
-        Key::PageUp => (true, 0x49),
-        Key::PageDown => (true, 0x51),
-        Key::Insert => (true, 0x52),
-        Key::Delete => (true, 0x53),
+        KeyCode::ArrowUp => (true, 0x48),
+        KeyCode::ArrowDown => (true, 0x50),
+        KeyCode::ArrowLeft => (true, 0x4B),
+        KeyCode::ArrowRight => (true, 0x4D),
+        KeyCode::Home => (true, 0x47),
+        KeyCode::End => (true, 0x4F),
+        KeyCode::PageUp => (true, 0x49),
+        KeyCode::PageDown => (true, 0x51),
+        KeyCode::Insert => (true, 0x52),
+        KeyCode::Delete => (true, 0x53),
 
-        // Pontuacao / simbolos (posicoes fisicas — no ABNT2:
-        //   Apostrophe(0x28) = tecla ´ ` (dead acute/grave)
-        //   LeftBracket(0x1A) = tecla ~ ^ (dead tilde/circumflex)
-        //   RightBracket(0x1B) = tecla [ {
-        //   Backslash(0x2B) = tecla ] }
-        //   Semicolon(0x27) = tecla ç Ç
-        //   Slash(0x35) = tecla ; : (ABNT2) ou / ? (US)
-        //   Backquote(0x29) = tecla ' " (ABNT2)
-        // )
-        Key::Minus => (false, 0x0C),
-        Key::Equal => (false, 0x0D),
-        Key::LeftBracket => (false, 0x1A),
-        Key::RightBracket => (false, 0x1B),
-        Key::Backslash => (false, 0x2B),
-        Key::Semicolon => (false, 0x27),
-        Key::Apostrophe => (false, 0x28),
-        Key::Comma => (false, 0x33),
-        Key::Period => (false, 0x34),
-        Key::Slash => (false, 0x35),
-        Key::Backquote => (false, 0x29),
+        // Pontuacao / simbolos
+        KeyCode::Minus => (false, 0x0C),
+        KeyCode::Equal => (false, 0x0D),
+        KeyCode::BracketLeft => (false, 0x1A),
+        KeyCode::BracketRight => (false, 0x1B),
+        KeyCode::Backslash => (false, 0x2B),
+        KeyCode::Semicolon => (false, 0x27),
+        KeyCode::Quote => (false, 0x28),
+        KeyCode::Comma => (false, 0x33),
+        KeyCode::Period => (false, 0x34),
+        KeyCode::Slash => (false, 0x35),
+        KeyCode::Backquote => (false, 0x29),
+        KeyCode::IntlBackslash => (false, 0x56), // Tecla extra ABNT2 (entre Shift e Z)
 
         // Numpad
-        Key::NumPad0 => (false, 0x52),
-        Key::NumPad1 => (false, 0x4F),
-        Key::NumPad2 => (false, 0x50),
-        Key::NumPad3 => (false, 0x51),
-        Key::NumPad4 => (false, 0x4B),
-        Key::NumPad5 => (false, 0x4C),
-        Key::NumPad6 => (false, 0x4D),
-        Key::NumPad7 => (false, 0x47),
-        Key::NumPad8 => (false, 0x48),
-        Key::NumPad9 => (false, 0x49),
-        Key::NumPadDot => (false, 0x53),
-        Key::NumPadSlash => (true, 0x35),
-        Key::NumPadAsterisk => (false, 0x37),
-        Key::NumPadMinus => (false, 0x4A),
-        Key::NumPadPlus => (false, 0x4E),
-        Key::NumPadEnter => (true, 0x1C),
+        KeyCode::Numpad0 => (false, 0x52),
+        KeyCode::Numpad1 => (false, 0x4F),
+        KeyCode::Numpad2 => (false, 0x50),
+        KeyCode::Numpad3 => (false, 0x51),
+        KeyCode::Numpad4 => (false, 0x4B),
+        KeyCode::Numpad5 => (false, 0x4C),
+        KeyCode::Numpad6 => (false, 0x4D),
+        KeyCode::Numpad7 => (false, 0x47),
+        KeyCode::Numpad8 => (false, 0x48),
+        KeyCode::Numpad9 => (false, 0x49),
+        KeyCode::NumpadDecimal => (false, 0x53),
+        KeyCode::NumpadDivide => (true, 0x35),
+        KeyCode::NumpadMultiply => (false, 0x37),
+        KeyCode::NumpadSubtract => (false, 0x4A),
+        KeyCode::NumpadAdd => (false, 0x4E),
+        KeyCode::NumpadEnter => (true, 0x1C),
 
-        Key::Unknown | Key::Count => return None,
+        _ => return None,
     };
 
     Some(Scancode::from_u8(extended, code))
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Conexao RDP (TCP → TLS)
+// Conexao RDP (TCP -> TLS)
 // ---------------------------------------------------------------------------
 
 type UpgradedFramed =

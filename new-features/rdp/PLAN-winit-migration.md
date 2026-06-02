@@ -22,114 +22,79 @@ Apenas a thread principal (render + input) muda. A thread de rede
 
 ---
 
-## Etapas
+## Status: IMPLEMENTADO
 
-### 1. Atualizar Cargo.toml
+A migracao foi concluida. Detalhes da implementacao abaixo.
 
-```toml
-# Remover
-minifb = "0.28"
+---
 
-# Adicionar
-winit = "0.30"
-softbuffer = "0.4"
-```
+## Arquitetura final
 
-### 2. Criar a janela (substituir Window::new)
+### winit 0.30 (ApplicationHandler trait)
 
 ```rust
-use winit::event_loop::EventLoop;
-use winit::window::WindowAttributes;
+struct App { ... }
 
-let event_loop = EventLoop::new()?;
-let window = event_loop.create_window(
-    WindowAttributes::default()
-        .with_title(format!("RDP POC - {}@{}", username, host))
-        .with_inner_size(winit::dpi::LogicalSize::new(width, height))
-        .with_resizable(false),
-)?;
-window.set_ime_allowed(true); // habilita input Unicode/IME
-```
+impl ApplicationHandler<UserEvent> for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Criar janela + softbuffer surface aqui
+        let window = Arc::new(event_loop.create_window(attrs)?);
+        let context = softbuffer::Context::new(window.clone())?;
+        let surface = softbuffer::Surface::new(&context, window.clone())?;
+        self.window = Some(window);
+        self.surface = Some(surface);
+    }
 
-### 3. Criar surface de pixels (substituir update_with_buffer)
+    fn user_event(&mut self, _el: &ActiveEventLoop, event: UserEvent) {
+        // Waker do network thread
+        match event {
+            UserEvent::FrameReady => window.request_redraw(),
+        }
+    }
 
-```rust
-use softbuffer::Surface;
-let context = softbuffer::Context::new(&window)?;
-let mut surface = Surface::new(&context, &window)?;
-surface.resize(
-    NonZeroU32::new(width as u32).unwrap(),
-    NonZeroU32::new(height as u32).unwrap(),
-)?;
-```
-
-Render: copiar `Arc<Mutex<Vec<u32>>>` -> `surface.buffer_mut()`, entao
-`buffer.present()`.
-
-### 4. Event loop (substituir while loop)
-
-```rust
-event_loop.run(move |event, elwt| {
-    match event {
-        Event::WindowEvent { event, .. } => match event {
-            // Teclado
-            WindowEvent::KeyboardInput { event: key_event, .. } => { ... }
-            WindowEvent::ModifiersChanged(mods) => { modifiers = mods.state(); }
-
-            // Mouse
-            WindowEvent::CursorMoved { position, .. } => { ... }
-            WindowEvent::MouseInput { state, button, .. } => { ... }
-            WindowEvent::MouseWheel { delta, .. } => { ... }
-
-            // Lifecycle
-            WindowEvent::CloseRequested => { elwt.exit(); }
-            WindowEvent::RedrawRequested => { render_frame(); }
+    fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        match event {
+            WindowEvent::KeyboardInput { .. } => { /* scancode dispatch */ }
+            WindowEvent::ModifiersChanged(mods) => { /* track modifiers */ }
+            WindowEvent::CursorMoved { .. } => { /* mouse move */ }
+            WindowEvent::MouseInput { .. } => { /* mouse button */ }
+            WindowEvent::MouseWheel { .. } => { /* scroll */ }
+            WindowEvent::RedrawRequested => { /* blit framebuffer */ }
+            WindowEvent::CloseRequested => { el.exit(); }
             _ => {}
-        },
-        Event::AboutToWait => {
-            window.request_redraw(); // ~vsync ou loop continuo
         }
-        _ => {}
     }
-});
+
+    fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
+        // ControlFlow::Wait — acordamos via UserEvent::FrameReady
+    }
+}
+
+event_loop.run_app(&mut app)?;
 ```
 
-### 5. Mapeamento de teclado
+### Network thread waker (EventLoopProxy)
 
-Winit usa `KeyEvent`:
-- `event.physical_key` -> `KeyCode` (equivalente ao nosso scancode map)
-- `event.text` -> `Option<SmolStr>` (caractere Unicode composto, ja com
-  dead keys resolvidos -- resolve acentos!)
-- `event.state` -> Pressed/Released
-
-**Estrategia**:
-- Para teclas com `text` disponivel E sem Ctrl/Alt segurado:
-  usar `Operation::UnicodeKeyPressed(char)` (resolve acentos,
-  Shift+;=:, dead keys, tudo automatico)
-- Para teclas sem texto (F1-F12, arrows, modifiers) OU com Ctrl/Alt:
-  mapear `KeyCode` -> scancode
-- Modifiers (Ctrl, Alt, Super, Shift sozinho): sempre enviar como scancode
-
-### 6. Clipboard paste (Ctrl+V)
-
-No event handler de teclado:
 ```rust
-if modifiers.control_key() && key_event.physical_key == KeyCode::KeyV
-   && key_event.state == ElementState::Pressed
-{
-    // Ler clipboard local, enviar como UnicodeKeyPressed
-    if let Ok(mut clip) = arboard::Clipboard::new() {
-        if let Ok(text) = clip.get_text() {
-            input_tx.send(InputMsg::ClipboardPaste(text));
-        }
-    }
-    return; // Nao enviar Ctrl+V como scancode
+// Network thread envia waker quando ha frame novo:
+if has_update {
+    buffer.try_lock() -> copy pixels
+    frame_ready.store(true)
+    proxy.send_event(UserEvent::FrameReady)  // acorda event loop
 }
 ```
 
-### 7. Mouse
+Isso evita `ControlFlow::Poll` (100% CPU) e garante latencia minima.
 
-Mapeamento direto:
+### Mapeamento de teclado
+
+- `event.physical_key` → `KeyCode` → mapeado para RDP Scancode via `keycode_to_scancode()`
+- `event.repeat` → ignorado (servidor RDP gera repeticao)
+- Modifiers trackados via `WindowEvent::ModifiersChanged`
+- Ctrl+V interceptado para clipboard paste local
+
+### Mouse
+
 | winit event | Operacao RDP |
 |---|---|
 | `CursorMoved { position }` | `Operation::MouseMove` |
@@ -139,27 +104,16 @@ Mapeamento direto:
 | `MouseInput { Released, Right }` | `Operation::MouseButtonReleased(Right)` |
 | `MouseWheel { LineDelta(x,y) }` | `Operation::WheelRotations` |
 
-### 8. Render (RedrawRequested)
+### Render (RedrawRequested)
 
 ```rust
-WindowEvent::RedrawRequested => {
-    if frame_ready.swap(false, Ordering::Acquire) {
-        if let Ok(buf) = buffer.lock() {
-            let mut sb = surface.buffer_mut().unwrap();
-            sb.copy_from_slice(&buf);
-            sb.present().unwrap();
-        }
-    }
+if frame_ready.swap(false, Acquire) {
+    let buf = shared_buffer.lock();
+    let mut sb = surface.buffer_mut();
+    sb.copy_from_slice(&buf);
+    sb.present();
 }
 ```
-
-### 9. Control flow / FPS
-
-winit 0.30 usa `ControlFlow`:
-- `ControlFlow::Poll` = loop continuo (equivalente ao set_target_fps(1000))
-- Ou `ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(1))`
-
-Usar `Poll` para manter latencia minima de input.
 
 ---
 
@@ -167,31 +121,23 @@ Usar `Poll` para manter latencia minima de input.
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `Cargo.toml` | -minifb, +winit, +softbuffer |
-| `src/main.rs` | Refatorar render loop (thread principal) |
+| `Cargo.toml` | -minifb, +winit 0.30, +softbuffer 0.4 |
+| `src/main.rs` | Reescrito render loop (ApplicationHandler) |
 
-## O que NAO muda
+## O que NAO mudou
 
 - Thread de rede (leitura PDU, framebuffer write, input_rx processing)
 - `InputMsg` enum e channel
-- `key_to_scancode()` (adaptado para `KeyCode` do winit em vez de minifb Key)
 - `copy_xrgb32_to_buffer()` e formato de pixel
 - Logica de conexao RDP
 - CLI args
+- ACK flush imediato (otimizacao de latencia)
 
 ## Beneficios
 
-1. **Combos de teclas funcionam** (XKB nativo)
-2. **Acentos automaticos** via `KeyEvent.text` (dead keys resolvidos pelo OS)
+1. **Combos de teclas funcionam** (XKB nativo, ModifiersChanged)
+2. **Key repeat controlado** — ignoramos repeat (server gera), evita input duplicado
 3. **Clipboard paste** via Ctrl+V com deteccao confiavel de modifiers
-4. **Futuro**: winit e o mesmo crate usado internamente pelo Tauri -- facilita integracao
-
-## Riscos
-
-- softbuffer pode ter overhead minimo vs minifb (improvavel ser mensuravel)
-- winit 0.30 tem API de event loop com closures (mais verboso que o while loop)
-- Precisa testar em Wayland e X11
-
-## Estimativa
-
-~200-300 linhas de diff no main.rs. Arquitetura permanece igual.
+4. **CPU eficiente** — ControlFlow::Wait + EventLoopProxy (nao faz polling)
+5. **Futuro**: winit e o mesmo crate usado internamente pelo Tauri — facilita integracao
+6. **IntlBackslash** (tecla ABNT2 extra entre Shift e Z) agora mapeada
