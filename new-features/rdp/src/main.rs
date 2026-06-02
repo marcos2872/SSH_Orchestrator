@@ -92,6 +92,8 @@ fn main() -> anyhow::Result<()> {
 enum InputMsg {
     Mouse(Vec<Operation>),
     Keyboard(Vec<Operation>),
+    /// Colar texto da clipboard local via UnicodeKeyPressed (bypass CLIPRDR)
+    ClipboardPaste(String),
     Quit,
 }
 
@@ -136,6 +138,25 @@ fn run_session(
             while let Ok(msg) = input_rx.try_recv() {
                 match msg {
                     InputMsg::Mouse(ops) | InputMsg::Keyboard(ops) => {
+                        let events = input_db.apply(ops);
+                        let outputs = active_stage.process_fastpath_input(&mut image, &events)?;
+                        for out in outputs {
+                            if let ActiveStageOutput::ResponseFrame(frame) = out {
+                                framed.write_all(&frame)?;
+                            }
+                        }
+                        had_input = true;
+                    }
+                    InputMsg::ClipboardPaste(text) => {
+                        let ops: Vec<Operation> = text
+                            .chars()
+                            .flat_map(|c| {
+                                [
+                                    Operation::UnicodeKeyPressed(c),
+                                    Operation::UnicodeKeyReleased(c),
+                                ]
+                            })
+                            .collect();
                         let events = input_db.apply(ops);
                         let outputs = active_stage.process_fastpath_input(&mut image, &events)?;
                         for out in outputs {
@@ -212,6 +233,26 @@ fn run_session(
                                 }
                             }
                         }
+                        InputMsg::ClipboardPaste(text) => {
+                            let ops: Vec<Operation> = text
+                                .chars()
+                                .flat_map(|c| {
+                                    [
+                                        Operation::UnicodeKeyPressed(c),
+                                        Operation::UnicodeKeyReleased(c),
+                                    ]
+                                })
+                                .collect();
+                            let events = input_db.apply(ops);
+                            let outputs =
+                                active_stage.process_fastpath_input(&mut image, &events)?;
+                            for out in outputs {
+                                if let ActiveStageOutput::ResponseFrame(frame) = out {
+                                    framed.write_all(&frame)?;
+                                    needs_flush = true;
+                                }
+                            }
+                        }
                         InputMsg::Quit => return Ok(()),
                     }
                 }
@@ -245,7 +286,16 @@ fn run_session(
     let mut prev_keys: Vec<Key> = Vec::new();
 
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
-        // 1. Capturar e enviar input ANTES de renderizar (prioridade)
+        // 0. Atualizar estado de janela/input (poll de eventos do OS)
+        if frame_ready.swap(false, Ordering::Acquire) {
+            if let Ok(buf) = buffer.lock() {
+                window.update_with_buffer(&buf, width, height).unwrap_or(());
+            }
+        } else {
+            window.update();
+        }
+
+        // 1. Capturar e enviar input DEPOIS do update (estado de teclas atualizado)
         let mouse_ops = capture_mouse(
             window,
             &mut prev_mouse_pos,
@@ -256,19 +306,55 @@ fn run_session(
             let _ = input_tx.send(InputMsg::Mouse(mouse_ops));
         }
 
-        let key_ops = capture_keyboard(window, &mut prev_keys);
-        if !key_ops.is_empty() {
+        // Clipboard paste: Ctrl+V interceptado localmente e envia como Unicode.
+        // Sem CLIPRDR, Ctrl+V remoto e inutil — usamos para colar clipboard local.
+        let current_keys: Vec<Key> = window.get_keys();
+        let has_ctrl = current_keys.contains(&Key::LeftCtrl) || current_keys.contains(&Key::RightCtrl);
+        let has_v = current_keys.contains(&Key::V);
+        let v_is_new = has_v && !prev_keys.contains(&Key::V);
+        let clipboard_paste = has_ctrl && v_is_new;
+
+        // Gerar key ops a partir das mesmas current_keys (evita segunda chamada get_keys)
+        let key_ops = {
+            let mut ops = Vec::new();
+            for key in &current_keys {
+                if !prev_keys.contains(key) {
+                    // Se clipboard paste ativo, nao enviar V nem Ctrl como scancode
+                    if clipboard_paste && (*key == Key::V) {
+                        continue;
+                    }
+                    if let Some(sc) = key_to_scancode(*key) {
+                        tracing::debug!(?key, ?sc, "KeyPressed");
+                        ops.push(Operation::KeyPressed(sc));
+                    }
+                }
+            }
+            for key in prev_keys.iter() {
+                if !current_keys.contains(key) {
+                    if let Some(sc) = key_to_scancode(*key) {
+                        tracing::debug!(?key, ?sc, "KeyReleased");
+                        ops.push(Operation::KeyReleased(sc));
+                    }
+                }
+            }
+            prev_keys = current_keys;
+            ops
+        };
+
+        if !key_ops.is_empty() && !clipboard_paste {
             let _ = input_tx.send(InputMsg::Keyboard(key_ops));
         }
 
-        // 2. Renderizar buffer (lock rapido — so leitura)
-        if frame_ready.swap(false, Ordering::Acquire) {
-            if let Ok(buf) = buffer.lock() {
-                window.update_with_buffer(&buf, width, height).unwrap_or(());
+        if clipboard_paste {
+            tracing::info!("Clipboard paste detectado (Ctrl+V)!");
+            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                if let Ok(text) = clipboard.get_text() {
+                    tracing::info!(len = text.len(), "Clipboard text lido");
+                    if !text.is_empty() {
+                        let _ = input_tx.send(InputMsg::ClipboardPaste(text));
+                    }
+                }
             }
-        } else {
-            // Sem frame novo — update sem buffer para processar eventos de janela
-            window.update();
         }
     }
 
@@ -379,35 +465,13 @@ fn capture_mouse(
 // Captura de teclado — mapeia minifb::Key → scancode
 // ---------------------------------------------------------------------------
 
-fn capture_keyboard(window: &Window, prev_keys: &mut Vec<Key>) -> Vec<Operation> {
-    let mut ops = Vec::new();
 
-    let current_keys: Vec<Key> = window.get_keys();
-
-    // Detectar teclas novas (pressed)
-    for key in &current_keys {
-        if !prev_keys.contains(key) {
-            if let Some(sc) = key_to_scancode(*key) {
-                ops.push(Operation::KeyPressed(sc));
-            }
-        }
-    }
-
-    // Detectar teclas soltas (released)
-    for key in prev_keys.iter() {
-        if !current_keys.contains(key) {
-            if let Some(sc) = key_to_scancode(*key) {
-                ops.push(Operation::KeyReleased(sc));
-            }
-        }
-    }
-
-    *prev_keys = current_keys;
-    ops
-}
 
 /// Mapeia minifb::Key para RDP Scancode (Set 1 / XT scancodes).
-/// Retorna None para teclas nao mapeadas.
+/// Mapa completo incluindo Numpad, F13-F15, locks, Super, Menu, Pause.
+/// Acentos ABNT2: o servidor remoto faz a composicao de dead keys —
+/// basta enviar os scancodes fisicos corretos (Apostrophe = ´, Backquote = `,
+/// LeftBracket = ~^, Semicolon = ç no layout ABNT2).
 fn key_to_scancode(key: Key) -> Option<Scancode> {
     let (extended, code) = match key {
         // Linha numerica
@@ -450,18 +514,29 @@ fn key_to_scancode(key: Key) -> Option<Scancode> {
         Key::Y => (false, 0x15),
         Key::Z => (false, 0x2C),
 
-        // Teclas especiais
-        Key::Space => (false, 0x39),
-        Key::Enter => (false, 0x1C),
-        Key::Backspace => (false, 0x0E),
-        Key::Tab => (false, 0x0F),
+        // Modificadores
         Key::LeftShift => (false, 0x2A),
         Key::RightShift => (false, 0x36),
         Key::LeftCtrl => (false, 0x1D),
         Key::RightCtrl => (true, 0x1D),
         Key::LeftAlt => (false, 0x38),
-        Key::RightAlt => (true, 0x38),
+        Key::RightAlt => (true, 0x38), // AltGr no ABNT2
+        Key::LeftSuper => (true, 0x5B),
+        Key::RightSuper => (true, 0x5C),
+
+        // Locks
         Key::CapsLock => (false, 0x3A),
+        Key::NumLock => (false, 0x45),
+        Key::ScrollLock => (false, 0x46),
+
+        // Teclas especiais
+        Key::Space => (false, 0x39),
+        Key::Enter => (false, 0x1C),
+        Key::Backspace => (false, 0x0E),
+        Key::Tab => (false, 0x0F),
+        Key::Escape => (false, 0x01),
+        Key::Menu => (true, 0x5D),
+        Key::Pause => (false, 0x45), // Pause/Break (scancode especial)
 
         // Function keys
         Key::F1 => (false, 0x3B),
@@ -476,6 +551,9 @@ fn key_to_scancode(key: Key) -> Option<Scancode> {
         Key::F10 => (false, 0x44),
         Key::F11 => (false, 0x57),
         Key::F12 => (false, 0x58),
+        Key::F13 => (false, 0x64),
+        Key::F14 => (false, 0x65),
+        Key::F15 => (false, 0x66),
 
         // Navegacao (extended)
         Key::Up => (true, 0x48),
@@ -489,7 +567,15 @@ fn key_to_scancode(key: Key) -> Option<Scancode> {
         Key::Insert => (true, 0x52),
         Key::Delete => (true, 0x53),
 
-        // Pontuacao
+        // Pontuacao / simbolos (posicoes fisicas — no ABNT2:
+        //   Apostrophe(0x28) = tecla ´ ` (dead acute/grave)
+        //   LeftBracket(0x1A) = tecla ~ ^ (dead tilde/circumflex)
+        //   RightBracket(0x1B) = tecla [ {
+        //   Backslash(0x2B) = tecla ] }
+        //   Semicolon(0x27) = tecla ç Ç
+        //   Slash(0x35) = tecla ; : (ABNT2) ou / ? (US)
+        //   Backquote(0x29) = tecla ' " (ABNT2)
+        // )
         Key::Minus => (false, 0x0C),
         Key::Equal => (false, 0x0D),
         Key::LeftBracket => (false, 0x1A),
@@ -502,7 +588,25 @@ fn key_to_scancode(key: Key) -> Option<Scancode> {
         Key::Slash => (false, 0x35),
         Key::Backquote => (false, 0x29),
 
-        _ => return None,
+        // Numpad
+        Key::NumPad0 => (false, 0x52),
+        Key::NumPad1 => (false, 0x4F),
+        Key::NumPad2 => (false, 0x50),
+        Key::NumPad3 => (false, 0x51),
+        Key::NumPad4 => (false, 0x4B),
+        Key::NumPad5 => (false, 0x4C),
+        Key::NumPad6 => (false, 0x4D),
+        Key::NumPad7 => (false, 0x47),
+        Key::NumPad8 => (false, 0x48),
+        Key::NumPad9 => (false, 0x49),
+        Key::NumPadDot => (false, 0x53),
+        Key::NumPadSlash => (true, 0x35),
+        Key::NumPadAsterisk => (false, 0x37),
+        Key::NumPadMinus => (false, 0x4A),
+        Key::NumPadPlus => (false, 0x4E),
+        Key::NumPadEnter => (true, 0x1C),
+
+        Key::Unknown | Key::Count => return None,
     };
 
     Some(Scancode::from_u8(extended, code))
