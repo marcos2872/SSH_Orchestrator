@@ -37,14 +37,16 @@ const TerminalTabBar: React.FC<Props> = ({
             ? `${tab.server.username}@${tab.server.host}`
             : "Unknown";
 
-        // Dot color: Apple green for local, Apple system blue for SSH/SFTP
+        // Dot color: green for local, cyan for SFTP, blue for SSH
         const dotColor = isActive
           ? isLocal
             ? "#32d74b"
             : isSftp
               ? "#64d2ff"
               : "#0a84ff"
-          : "rgba(255,255,255,0.2)";
+          : "rgba(255,255,255,0.4)";
+
+        const borderColor = isLocal ? "#32d74b" : isSftp ? "#64d2ff" : "#0a84ff";
 
         return (
           <button
@@ -54,7 +56,7 @@ const TerminalTabBar: React.FC<Props> = ({
             style={{
               borderRight: "1px solid rgba(255,255,255,0.06)",
               borderBottom: isActive
-                ? `2px solid ${isLocal ? "#32d74b" : isSftp ? "#64d2ff" : "#0a84ff"}`
+                ? `2px solid ${borderColor}`
                 : "2px solid transparent",
               background: isActive
                 ? "rgba(255,255,255,0.07)"
@@ -79,9 +81,9 @@ const TerminalTabBar: React.FC<Props> = ({
                 e.stopPropagation();
                 onClose(tab.id);
               }}
-              className="ml-1 w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              className="ml-1 w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-white/10"
               style={{
-                color: "rgba(255,255,255,0.5)",
+                color: isActive ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.4)",
               }}
               title="Fechar aba"
             >

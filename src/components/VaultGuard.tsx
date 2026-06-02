@@ -144,7 +144,7 @@ const PasswordInput: React.FC<PasswordInputProps> = ({
     <div>
       <label
         className="block text-[11px] font-medium mb-1.5"
-        style={{ color: "rgba(235,235,245,0.45)" }}
+        style={{ color: "rgba(235,235,245,0.55)" }}
       >
         {label}
       </label>
@@ -169,7 +169,7 @@ const PasswordInput: React.FC<PasswordInputProps> = ({
             onKeyUp={handleKeyEvent}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            className="w-full bg-transparent py-2.5 pl-10 pr-10 text-sm text-white focus:outline-none placeholder:text-white/20"
+            className="w-full bg-transparent py-2.5 pl-10 pr-10 text-sm text-white focus:outline-none placeholder:text-white/40"
             placeholder={placeholder}
             autoFocus={autoFocus}
           />
@@ -546,14 +546,14 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                   </button>
 
                   {submitting && (
-                    <p className="text-xs text-center" style={{ color: "rgba(235,235,245,0.35)" }}>
+                    <p className="text-xs text-center" style={{ color: "rgba(235,235,245,0.55)" }}>
                       Uma janela do navegador foi aberta. Conclua o login por lá.
                     </p>
                   )}
 
                   <div className="relative flex items-center py-1">
                     <div className="flex-grow" style={{ height: "0.5px", background: "rgba(255,255,255,0.08)" }} />
-                    <span className="flex-shrink-0 mx-4 text-xs" style={{ color: "rgba(235,235,245,0.3)" }}>
+                    <span className="flex-shrink-0 mx-4 text-xs" style={{ color: "rgba(235,235,245,0.5)" }}>
                       ou
                     </span>
                     <div className="flex-grow" style={{ height: "0.5px", background: "rgba(255,255,255,0.08)" }} />
@@ -581,9 +581,9 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                 type="button"
                 onClick={() => navigateTo("welcome")}
                 className="flex items-center gap-1.5 text-xs font-medium mb-6 group transition-colors"
-                style={{ color: "rgba(235,235,245,0.4)" }}
+                style={{ color: "rgba(235,235,245,0.55)" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "rgba(235,235,245,0.4)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(235,235,245,0.55)")}
               >
                 <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
                 Voltar
@@ -709,7 +709,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                 {lastAccess && (
                   <div
                     className="mt-3 inline-flex items-center gap-1.5 text-xs"
-                    style={{ color: "rgba(235,235,245,0.35)" }}
+                    style={{ color: "rgba(235,235,245,0.55)" }}
                   >
                     <Clock className="w-3 h-3" />
                     <span>Última sessão: {formatRelativeTime(lastAccess)}</span>
@@ -765,9 +765,9 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
                 type="button"
                 onClick={() => navigateTo("welcome")}
                 className="flex items-center gap-1.5 text-xs font-medium mb-6 group transition-colors"
-                style={{ color: "rgba(235,235,245,0.4)" }}
+                style={{ color: "rgba(235,235,245,0.55)" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "rgba(235,235,245,0.4)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(235,235,245,0.55)")}
               >
                 <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
                 Voltar

@@ -155,7 +155,7 @@ const WorkspaceDetail: React.FC<Props> = ({
             <h2 className="text-[15px] font-semibold text-white leading-tight">
               {workspace.name}
             </h2>
-            <p className="text-[11px]" style={{ color: "rgba(235,235,245,0.4)" }}>
+            <p className="text-[11px]" style={{ color: "rgba(235,235,245,0.55)" }}>
               {servers.length} servidor{servers.length !== 1 ? "es" : ""}
             </p>
           </div>
@@ -198,7 +198,7 @@ const WorkspaceDetail: React.FC<Props> = ({
         {loading ? (
           <div
             className="flex items-center justify-center py-20 text-sm"
-            style={{ color: "rgba(235,235,245,0.35)" }}
+            style={{ color: "rgba(235,235,245,0.55)" }}
           >
             Carregando servidores...
           </div>
@@ -231,7 +231,7 @@ const WorkspaceDetail: React.FC<Props> = ({
               <h3 className="font-semibold text-[15px] text-white mb-1">Terminal Local</h3>
               <p
                 className="text-xs font-mono mb-4"
-                style={{ color: "rgba(235,235,245,0.45)" }}
+                style={{ color: "rgba(235,235,245,0.55)" }}
               >
                 Shell do sistema
               </p>
@@ -328,17 +328,18 @@ const WorkspaceDetail: React.FC<Props> = ({
                 </h3>
                 <p
                   className="text-xs font-mono mb-4 truncate"
-                  style={{ color: "rgba(235,235,245,0.4)" }}
+                  style={{ color: "rgba(235,235,245,0.55)" }}
                 >
                   {server.username}@{server.host}:{server.port}
                 </p>
                 <div
-                  className="flex items-center gap-2 pt-4"
+                  className="grid grid-cols-2 gap-2 pt-4"
                   style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}
                 >
                   <button
                     onClick={() => onConnect(server)}
-                    className="flex-1 py-2 text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 text-white/70"
+                    title="Terminal SSH"
+                    className="flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-semibold rounded-xl transition-colors text-white/60"
                     style={{ background: "rgba(255,255,255,0.06)" }}
                     onMouseEnter={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(10,132,255,0.15)";
@@ -346,15 +347,16 @@ const WorkspaceDetail: React.FC<Props> = ({
                     }}
                     onMouseLeave={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
-                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)";
                     }}
                   >
-                    <TerminalIcon className="w-3 h-3" /> Connect
+                    <TerminalIcon className="w-4 h-4" />
+                    SSH
                   </button>
                   <button
                     onClick={() => onSftp(server)}
-                    title="SFTP"
-                    className="px-3 py-2 text-xs font-semibold rounded-xl transition-colors text-white/70"
+                    title="Transferência de arquivos (SFTP)"
+                    className="flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-semibold rounded-xl transition-colors text-white/60"
                     style={{ background: "rgba(255,255,255,0.06)" }}
                     onMouseEnter={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(100,210,255,0.15)";
@@ -362,10 +364,11 @@ const WorkspaceDetail: React.FC<Props> = ({
                     }}
                     onMouseLeave={e => {
                       (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
-                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
+                      (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)";
                     }}
                   >
-                    <HardDrive className="w-3 h-3" />
+                    <HardDrive className="w-4 h-4" />
+                    SFTP
                   </button>
                 </div>
               </div>
