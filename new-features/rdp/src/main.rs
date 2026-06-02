@@ -16,8 +16,12 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use anyhow::Context as _;
-use ironrdp::connector::{self, BitmapConfig, ClientConnector, ConnectionResult, Credentials, DesktopSize};
-use ironrdp::input::{Database as InputDatabase, MouseButton, MousePosition, Operation, Scancode, WheelRotations};
+use ironrdp::connector::{
+    self, BitmapConfig, ClientConnector, ConnectionResult, Credentials, DesktopSize,
+};
+use ironrdp::input::{
+    Database as InputDatabase, MouseButton, MousePosition, Operation, Scancode, WheelRotations,
+};
 use ironrdp::pdu::gcc::KeyboardType;
 use ironrdp::pdu::rdp::capability_sets::MajorPlatformType;
 use ironrdp::session::image::DecodedImage;
@@ -199,7 +203,8 @@ fn run_session(
                     match msg {
                         InputMsg::Mouse(ops) | InputMsg::Keyboard(ops) => {
                             let events = input_db.apply(ops);
-                            let outputs = active_stage.process_fastpath_input(&mut image, &events)?;
+                            let outputs =
+                                active_stage.process_fastpath_input(&mut image, &events)?;
                             for out in outputs {
                                 if let ActiveStageOutput::ResponseFrame(frame) = out {
                                     framed.write_all(&frame)?;
@@ -221,7 +226,7 @@ fn run_session(
             // 3. Atualizar buffer e sinalizar frame pronto
             if has_update {
                 if let Ok(mut buf) = buf_clone.try_lock() {
-                     copy_xrgb32_to_buffer(&image, &mut buf);
+                    copy_xrgb32_to_buffer(&image, &mut buf);
                     ready_clone.store(true, Ordering::Release);
                 }
             } else if !had_input {
@@ -241,7 +246,12 @@ fn run_session(
 
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
         // 1. Capturar e enviar input ANTES de renderizar (prioridade)
-        let mouse_ops = capture_mouse(window, &mut prev_mouse_pos, &mut prev_left_down, &mut prev_right_down);
+        let mouse_ops = capture_mouse(
+            window,
+            &mut prev_mouse_pos,
+            &mut prev_left_down,
+            &mut prev_right_down,
+        );
         if !mouse_ops.is_empty() {
             let _ = input_tx.send(InputMsg::Mouse(mouse_ops));
         }
@@ -286,13 +296,18 @@ fn copy_xrgb32_to_buffer(image: &DecodedImage, out: &mut [u32]) {
     let data = image.data();
 
     if stride == width * 4 {
-        // Stride alinhado — copia direta via cast
-        let src = unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u32, width * height) };
+        // SAFETY: DecodedImage garante data.len() >= width * height * 4 quando stride == width*4.
+        // O ponteiro de u8 é reinterpretado como u32 (4 bytes por pixel, BgrX32).
+        // Alinhamento: data vem de Vec<u8> internamente; em x86_64 alocações são alinhadas a 16 bytes.
+        let src =
+            unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u32, width * height) };
         out[..width * height].copy_from_slice(src);
     } else {
         // Stride com padding — copia row por row
         for y in 0..height {
             let row_start = y * stride;
+            // SAFETY: Cada row tem pelo menos width*4 bytes válidos (stride >= width*4).
+            // Mesmo argumento de alinhamento acima.
             let src = unsafe {
                 std::slice::from_raw_parts(data[row_start..].as_ptr() as *const u32, width)
             };
@@ -501,7 +516,8 @@ fn key_to_scancode(key: Key) -> Option<Scancode> {
 // Conexao RDP (TCP → TLS)
 // ---------------------------------------------------------------------------
 
-type UpgradedFramed = ironrdp_blocking::Framed<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>;
+type UpgradedFramed =
+    ironrdp_blocking::Framed<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>;
 
 fn connect(
     config: connector::Config,
@@ -518,7 +534,9 @@ fn connect(
     info!(%server_addr, "Conectando via TCP...");
     let tcp_stream = TcpStream::connect(server_addr).context("falha no TCP connect")?;
     tcp_stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    tcp_stream.set_nodelay(true).context("falha ao setar TCP_NODELAY")?;
+    tcp_stream
+        .set_nodelay(true)
+        .context("falha ao setar TCP_NODELAY")?;
 
     let client_addr = tcp_stream.local_addr()?;
     let mut framed = ironrdp_blocking::Framed::new(tcp_stream);
@@ -558,7 +576,10 @@ fn connect(
 fn tls_upgrade(
     stream: TcpStream,
     server_name: String,
-) -> anyhow::Result<(rustls::StreamOwned<rustls::ClientConnection, TcpStream>, Vec<u8>)> {
+) -> anyhow::Result<(
+    rustls::StreamOwned<rustls::ClientConnection, TcpStream>,
+    Vec<u8>,
+)> {
     let mut config = rustls::client::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(std::sync::Arc::new(NoCertificateVerification))
@@ -622,7 +643,8 @@ fn build_connector_config(config: &CliConfig) -> anyhow::Result<connector::Confi
         bitmap: Some(BitmapConfig {
             lossy_compression: true,
             color_depth: 32,
-            codecs: client_codecs_capabilities(&["remotefx"]).unwrap(),
+            codecs: client_codecs_capabilities(&["remotefx"])
+                .map_err(|e| anyhow::anyhow!("falha ao criar codec RemoteFX: {e}"))?,
         }),
         client_build: 0,
         client_name: "rdp-poc".to_owned(),
@@ -730,8 +752,8 @@ fn parse_args() -> anyhow::Result<CliConfig> {
 
 fn setup_logging() -> anyhow::Result<()> {
     use tracing::metadata::LevelFilter;
-    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::prelude::*;
+    use tracing_subscriber::EnvFilter;
 
     let fmt_layer = tracing_subscriber::fmt::layer().compact();
     let env_filter = EnvFilter::builder()
