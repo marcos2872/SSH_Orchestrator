@@ -123,11 +123,11 @@ fn run_session(
         let mut active_stage = ActiveStage::new(connection_result);
         let mut input_db = InputDatabase::new();
 
-        // Timeout minimo para nao bloquear
+        // Timeout minimo para nao bloquear (100µs para reduzir latencia)
         let (stream, _) = framed.get_inner_mut();
         stream
             .sock
-            .set_read_timeout(Some(Duration::from_micros(500)))
+            .set_read_timeout(Some(Duration::from_micros(100)))
             .ok();
 
         let mut last_input_time: Option<std::time::Instant> = None;
@@ -178,7 +178,6 @@ fn run_session(
 
             // 2. Ler PDUs do servidor (sem limite — drenar tudo disponivel)
             let mut has_update = false;
-            let mut needs_flush = false;
             loop {
                 match framed.read_pdu() {
                     Ok((action, payload)) => {
@@ -186,8 +185,11 @@ fn run_session(
                         for out in outputs {
                             match out {
                                 ActiveStageOutput::ResponseFrame(frame) => {
+                                    // Flush ACK imediato — servidor espera ACK antes de
+                                    // enviar proximo frame, atrasar isso causa latencia
+                                    // em cascata.
                                     framed.write_all(&frame)?;
-                                    needs_flush = true;
+                                    framed.get_inner_mut().0.flush()?;
                                 }
                                 ActiveStageOutput::GraphicsUpdate(_) => {
                                     if let Some(t) = last_input_time.take() {
@@ -229,7 +231,7 @@ fn run_session(
                             for out in outputs {
                                 if let ActiveStageOutput::ResponseFrame(frame) = out {
                                     framed.write_all(&frame)?;
-                                    needs_flush = true;
+                                    framed.get_inner_mut().0.flush()?;
                                 }
                             }
                         }
@@ -249,19 +251,13 @@ fn run_session(
                             for out in outputs {
                                 if let ActiveStageOutput::ResponseFrame(frame) = out {
                                     framed.write_all(&frame)?;
-                                    needs_flush = true;
+                                    framed.get_inner_mut().0.flush()?;
                                 }
                             }
                         }
                         InputMsg::Quit => return Ok(()),
                     }
                 }
-            }
-
-            // Flush ACKs e respostas para o servidor — CRITICO para latencia!
-            // Servidor espera ACK antes de enviar proximo frame.
-            if needs_flush {
-                framed.get_inner_mut().0.flush()?;
             }
 
             // 3. Atualizar buffer e sinalizar frame pronto
@@ -271,8 +267,9 @@ fn run_session(
                     ready_clone.store(true, Ordering::Release);
                 }
             } else if !had_input {
-                // Nenhum dado — yield minimo
-                thread::yield_now();
+                // Nenhum dado — sleep curto e previsivel (yield depende do scheduler
+                // e pode causar delays de 1-15ms no Linux)
+                thread::sleep(Duration::from_micros(100));
             }
         }
 
