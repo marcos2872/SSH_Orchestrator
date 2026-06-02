@@ -102,6 +102,7 @@ fn main() -> anyhow::Result<()> {
         running: Arc::clone(&running),
         input_tx,
         modifiers: ModifiersState::empty(),
+        ctrl_held: false,
         title: format!("RDP POC - {}@{}", config.username, config.host),
         network_thread: Some(network_thread),
     };
@@ -154,6 +155,7 @@ struct App {
     running: Arc<AtomicBool>,
     input_tx: std::sync::mpsc::Sender<InputMsg>,
     modifiers: ModifiersState,
+    ctrl_held: bool, // Track Ctrl manualmente (fallback para Wayland)
     title: String,
     network_thread: Option<thread::JoinHandle<anyhow::Result<()>>>,
 }
@@ -229,19 +231,42 @@ impl ApplicationHandler<UserEvent> for App {
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
-                // Ctrl+V: clipboard paste local
-                if self.modifiers.control_key()
+                // Track Ctrl manualmente (ModifiersChanged pode chegar atrasado no Wayland)
+                if let PhysicalKey::Code(KeyCode::ControlLeft | KeyCode::ControlRight) =
+                    event.physical_key
+                {
+                    self.ctrl_held = event.state == ElementState::Pressed;
+                }
+
+                let ctrl = self.ctrl_held || self.modifiers.control_key();
+
+                // Ctrl+V ou Ctrl+Shift+V: clipboard paste local
+                let is_paste = ctrl
                     && event.physical_key == PhysicalKey::Code(KeyCode::KeyV)
                     && event.state == ElementState::Pressed
-                    && !event.repeat
-                {
-                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                        if let Ok(text) = clipboard.get_text() {
-                            if !text.is_empty() {
-                                tracing::info!(len = text.len(), "Clipboard paste");
-                                let _ = self.input_tx.send(InputMsg::ClipboardPaste(text));
-                            }
+                    && !event.repeat;
+
+                if is_paste {
+                    tracing::info!("Ctrl+V detectado, lendo clipboard...");
+                    match read_system_clipboard() {
+                        Ok(text) if !text.is_empty() => {
+                            tracing::info!(len = text.len(), "Clipboard paste OK");
+                            // Liberar TODOS os modificadores no remoto antes de enviar
+                            // texto Unicode, senao o servidor interpreta cada char
+                            // como Ctrl+char ou Shift+char.
+                            let releases = vec![
+                                Operation::KeyReleased(Scancode::from_u8(false, 0x1D)), // Ctrl L
+                                Operation::KeyReleased(Scancode::from_u8(true, 0x1D)),  // Ctrl R
+                                Operation::KeyReleased(Scancode::from_u8(false, 0x2A)), // Shift L
+                                Operation::KeyReleased(Scancode::from_u8(false, 0x36)), // Shift R
+                                Operation::KeyReleased(Scancode::from_u8(false, 0x38)), // Alt L
+                                Operation::KeyReleased(Scancode::from_u8(true, 0x38)),  // Alt R
+                            ];
+                            let _ = self.input_tx.send(InputMsg::Keyboard(releases));
+                            let _ = self.input_tx.send(InputMsg::ClipboardPaste(text));
                         }
+                        Ok(_) => tracing::warn!("Clipboard vazio"),
+                        Err(e) => tracing::error!("Clipboard falhou: {e}"),
                     }
                     return;
                 }
@@ -500,6 +525,52 @@ fn spawn_network_thread(
 
         Ok(())
     })
+}
+
+// ---------------------------------------------------------------------------
+// Clipboard — leitura via comandos do sistema (wl-paste / xclip / xsel)
+//
+// arboard nao funciona no Wayland quando outra lib (winit) controla o display.
+// Fallback robusto usando ferramentas CLI do sistema.
+// ---------------------------------------------------------------------------
+
+fn read_system_clipboard() -> anyhow::Result<String> {
+    use std::process::Command;
+
+    // 1. Tentar wl-paste (Wayland)
+    if let Ok(output) = Command::new("wl-paste")
+        .arg("--no-newline")
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            return Ok(text);
+        }
+    }
+
+    // 2. Tentar xclip (X11)
+    if let Ok(output) = Command::new("xclip")
+        .args(["-selection", "clipboard", "-o"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            return Ok(text);
+        }
+    }
+
+    // 3. Tentar xsel (X11 alternativo)
+    if let Ok(output) = Command::new("xsel")
+        .args(["--clipboard", "--output"])
+        .output()
+    {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            return Ok(text);
+        }
+    }
+
+    anyhow::bail!("nenhum comando de clipboard disponivel (wl-paste, xclip, xsel)")
 }
 
 // ---------------------------------------------------------------------------

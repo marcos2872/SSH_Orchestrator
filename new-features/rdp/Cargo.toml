@@ -16,4 +16,3 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 winit = { version = "0.30", features = ["rwh_06"] }
 softbuffer = "0.4"
-arboard = "3"
