@@ -292,10 +292,10 @@ impl ApplicationHandler<UserEvent> for App {
                     if let Some(sc) = keycode_to_scancode(code) {
                         let op = match event.state {
                             ElementState::Pressed => {
-                                if event.repeat {
-                                    return; // RDP nao precisa de repeat, server gera
-                                }
-                                tracing::debug!(?code, ?sc, "KeyPressed");
+                                // Repeats do SO precisam ser encaminhados: o servidor RDP
+                                // nao auto-repete teclas seguradas. O InputDatabase converte
+                                // um KeyPressed em tecla ja pressionada em release+press.
+                                tracing::debug!(?code, ?sc, repeat = event.repeat, "KeyPressed");
                                 Operation::KeyPressed(sc)
                             }
                             ElementState::Released => {
