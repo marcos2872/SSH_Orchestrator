@@ -1,5 +1,5 @@
 # Permite o build script do esbuild (exigido pelo Vite).
-# O pnpm 11 bloqueia build scripts de dependências por padrão; configs
-# como onlyBuiltDependencies agora vivem apenas neste arquivo.
-onlyBuiltDependencies:
-  - esbuild
+# pnpm 11 bloqueia build scripts por padrão; allowBuilds substitui a
+# antiga onlyBuiltDependencies (que não é mais lida no pnpm 11).
+allowBuilds:
+  esbuild: true
