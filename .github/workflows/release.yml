@@ -53,16 +53,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Extrai a seção mais recente do CHANGELOG.md (da primeira à segunda
-      # linha `## `) para usar como corpo da release
+      # linha `## `) para usar como corpo da release. Heredoc é o método
+      # correto para outputs multilinha no GITHUB_OUTPUT.
       - name: Read changelog
         id: changelog
         run: |
           awk '/^## /{section++} section == 1' CHANGELOG.md > /tmp/release-body.md
-          body=$(cat /tmp/release-body.md)
-          body="${body//'%'/'%25'}"
-          body="${body//$'\n'/'%0A'}"
-          body="${body//$'\r'/'%0D'}"
-          echo "body=$body" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<CHANGELOG"
+            cat /tmp/release-body.md
+            echo "CHANGELOG"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
