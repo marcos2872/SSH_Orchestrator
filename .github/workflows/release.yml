@@ -12,6 +12,11 @@ jobs:
   build-release:
     name: Build and publish ${{ github.ref_name }}
     runs-on: ubuntu-22.04
+    env:
+      # Credenciais do GitHub OAuth App embutidas no binário em tempo de
+      # compilação via build.rs (Repository secrets — nunca commitar no repo)
+      GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
+      GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,6 +31,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
+            libdbus-1-dev \
             patchelf \
             rpm \
             file

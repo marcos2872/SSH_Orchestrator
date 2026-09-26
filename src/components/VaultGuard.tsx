@@ -7,6 +7,7 @@ import {
   checkSyncedVault,
   importSyncedVault,
   getVaultLastAccess,
+  tryAutoUnlock,
 } from "../lib/api/vault";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -329,11 +330,14 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     try {
       const configured = await isVaultConfigured();
       if (configured) {
+        // Tenta pular a senha via desbloqueio automático (keychain + prazo)
+        const autoUnlocked = await tryAutoUnlock().catch(() => false);
         const locked = await isVaultLocked();
         if (locked) {
           setFlowState("unlock");
           fetchLastAccess();
         } else {
+          if (autoUnlocked) window.dispatchEvent(new Event("vault-unlocked"));
           setFlowState("loading");
           return;
         }

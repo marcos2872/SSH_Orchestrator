@@ -28,11 +28,17 @@ import {
   LockOpen,
   ShieldAlert,
   Keyboard,
+  Timer,
 } from "lucide-react";
 import { useToast } from "../hooks/useToast";
 import { useAuth } from "../hooks/useAuth";
 import { checkAppUpdate } from "../lib/api/app";
 import type { AppUpdateInfo } from "../lib/api/app";
+import {
+  getUnlockFrequency,
+  setUnlockFrequency,
+} from "../lib/api/vault";
+import type { UnlockFrequency } from "../lib/api/vault";
 import Modal from "./Modal";
 import KeybindingsSection from "./Settings/KeybindingsSection";
 import { SectionLabel } from "./ui";
@@ -91,6 +97,10 @@ const Sidebar: React.FC<Props> = ({
   // Versão instalada + verificação de update (consultada ao abrir o app)
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
 
+  // Frequência do desbloqueio automático do vault
+  const [unlockFreq, setUnlockFreq] = useState<UnlockFrequency>("always");
+  const [unlockFreqSaving, setUnlockFreqSaving] = useState(false);
+
   useEffect(() => {
     checkAppUpdate()
       .then(setUpdateInfo)
@@ -123,10 +133,12 @@ const Sidebar: React.FC<Props> = ({
     Promise.all([
       isVaultConfigured(),
       isVaultLocked(),
+      getUnlockFrequency().catch(() => "always" as UnlockFrequency),
     ])
-      .then(([configured, locked]) => {
+      .then(([configured, locked, freq]) => {
         setVaultConfigured(configured);
         setVaultLocked(locked);
+        setUnlockFreq(freq);
       })
       .catch(() => {
         setVaultConfigured(false);
@@ -214,6 +226,24 @@ const Sidebar: React.FC<Props> = ({
       toast.error(`Erro ao desconectar: ${err}`);
     } finally {
       setGithubActionLoading(false);
+    }
+  };
+
+  const handleFreqChange = async (freq: UnlockFrequency) => {
+    if (freq === unlockFreq || unlockFreqSaving) return;
+    setUnlockFreqSaving(true);
+    try {
+      await setUnlockFrequency(freq);
+      setUnlockFreq(freq);
+      toast.success(
+        freq === "always"
+          ? "Senha pedida toda vez que o app abrir."
+          : "Desbloqueio automático ativado.",
+      );
+    } catch (err) {
+      toast.error(`Erro ao salvar preferência: ${err}`);
+    } finally {
+      setUnlockFreqSaving(false);
     }
   };
 
@@ -661,6 +691,49 @@ const Sidebar: React.FC<Props> = ({
                   </div>
                 </>
               )}
+            </div>
+          </div>
+
+          {/* ── Section: Desbloqueio automático ── */}
+          <div>
+            <SectionLabel icon={<Timer />}>Desbloqueio automático</SectionLabel>
+
+            <div
+              className="rounded-2xl p-4"
+              style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+            >
+              <div
+                className="flex rounded-xl overflow-hidden p-0.5 mb-3"
+                style={{ background: "rgba(255,255,255,0.06)", opacity: unlockFreqSaving ? 0.5 : 1 }}
+              >
+                {(
+                  [
+                    { value: "always", label: "Todas as vezes" },
+                    { value: "week", label: "1 semana" },
+                    { value: "month", label: "1 mês" },
+                  ] as Array<{ value: UnlockFrequency; label: string }>
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={unlockFreqSaving}
+                    onClick={() => handleFreqChange(opt.value)}
+                    className="flex-1 py-1.5 text-xs font-semibold rounded-[10px] transition-all disabled:cursor-wait"
+                    style={
+                      unlockFreq === opt.value
+                        ? { background: "rgba(255,255,255,0.12)", color: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }
+                        : { color: "rgba(235,235,245,0.45)" }
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
+                {unlockFreq === "always"
+                  ? "A Master Password é pedida toda vez que o app abre."
+                  : "Nesse período, o app abre sem pedir a senha neste dispositivo (protegido pelo login do sistema)."}
+              </p>
             </div>
           </div>
 

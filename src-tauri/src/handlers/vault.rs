@@ -1,5 +1,49 @@
+use crate::services::crypto::CryptoService;
 use crate::AppState;
 use tauri::{Manager, State};
+
+/// Frequência do desbloqueio automático (chave em `settings`).
+/// `always` = pede a senha toda vez que o app abre (padrão).
+pub const UNLOCK_FREQUENCY_KEY: &str = "vault_unlock_frequency";
+const WEEK_SECS: i64 = 7 * 24 * 3600;
+const MONTH_SECS: i64 = 30 * 24 * 3600;
+
+fn period_secs(frequency: &str) -> Option<i64> {
+    match frequency {
+        "week" => Some(WEEK_SECS),
+        "month" => Some(MONTH_SECS),
+        _ => None,
+    }
+}
+
+async fn read_frequency(pool: &sqlx::SqlitePool) -> String {
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = ?")
+        .bind(UNLOCK_FREQUENCY_KEY)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+    row.map(|(v,)| v).unwrap_or_else(|| "always".to_string())
+}
+
+fn read_last_unlocked_at(app: &tauri::AppHandle) -> Option<chrono::DateTime<chrono::Utc>> {
+    let app_dir = app.path().app_data_dir().ok()?;
+    let raw = std::fs::read_to_string(app_dir.join("vault_meta.json")).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let ts = parsed.get("last_unlocked_at")?.as_str()?;
+    chrono::DateTime::parse_from_rfc3339(ts)
+        .ok()
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+}
+
+/// Salva a DEK no keychain quando o desbloqueio automático está ativo.
+/// Best-effort: falha silenciosa (log) nunca quebra o unlock manual.
+async fn store_keychain_if_enabled(state: &State<'_, AppState>) {
+    if read_frequency(&state.db.pool).await != "always" {
+        if let Err(e) = state.crypto.store_dek_in_keychain() {
+            tracing::warn!("Falha ao salvar DEK no keychain: {}", e);
+        }
+    }
+}
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
@@ -47,7 +91,7 @@ pub fn get_vault_last_access(app: tauri::AppHandle) -> Result<Option<String>, St
 
 #[tauri::command]
 #[tracing::instrument(skip(state, password, app))]
-pub fn setup_vault(
+pub async fn setup_vault(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     password: String,
@@ -60,12 +104,13 @@ pub fn setup_vault(
         .setup_vault(&password)
         .map_err(|e| e.to_string())?;
     record_last_access(&app);
+    store_keychain_if_enabled(&state).await;
     Ok(())
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state, password, app))]
-pub fn unlock_vault(
+pub async fn unlock_vault(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     password: String,
@@ -75,6 +120,7 @@ pub fn unlock_vault(
     }
     state.crypto.unlock(&password).map_err(|e| e.to_string())?;
     record_last_access(&app);
+    store_keychain_if_enabled(&state).await;
     Ok(())
 }
 
@@ -94,7 +140,7 @@ pub fn check_synced_vault(app: tauri::AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 #[tracing::instrument(skip(app, state, password))]
-pub fn import_synced_vault(
+pub async fn import_synced_vault(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     password: String,
@@ -145,7 +191,108 @@ pub fn import_synced_vault(
             }
         }
         record_last_access(&app);
+        store_keychain_if_enabled(&state).await;
     }
 
     import_result
+}
+
+/// Frequência atual do desbloqueio automático (`always` quando nunca configurada).
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_unlock_frequency(state: State<'_, AppState>) -> Result<String, String> {
+    Ok(read_frequency(&state.db.pool).await)
+}
+
+/// Altera a frequência do desbloqueio automático.
+/// Voltar para `always` apaga a DEK do keychain (volta a pedir senha sempre).
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn set_unlock_frequency(
+    state: State<'_, AppState>,
+    frequency: String,
+) -> Result<(), String> {
+    if !["always", "week", "month"].contains(&frequency.as_str()) {
+        return Err("Frequência inválida. Use always, week ou month.".to_string());
+    }
+    sqlx::query(
+        "INSERT INTO settings (key, value, hlc) VALUES (?, ?, '')
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(UNLOCK_FREQUENCY_KEY)
+    .bind(&frequency)
+    .execute(&state.db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    if frequency == "always" {
+        CryptoService::clear_keychain();
+    } else if state.crypto.is_configured() {
+        // Vault desbloqueado agora: salva a DEK já; se bloqueado, salva no unlock
+        if let Err(e) = state.crypto.store_dek_in_keychain() {
+            tracing::debug!("DEK não salva agora ({}), será salva no unlock", e);
+        }
+    }
+    Ok(())
+}
+
+/// Tenta desbloquear o vault sem senha usando a DEK do keychain.
+/// Retorna `true` se desbloqueou (ou já estava desbloqueado).
+/// Janela deslizante: cada abertura dentro do prazo renova o timestamp.
+/// Prazo expirado apaga a entrada do keychain e exige a senha.
+#[tauri::command]
+#[tracing::instrument(skip(app, state))]
+pub async fn try_auto_unlock(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    if !state.crypto.is_configured() {
+        return Ok(false);
+    }
+    if !state.crypto.is_locked() {
+        return Ok(true);
+    }
+    let period = match period_secs(&read_frequency(&state.db.pool).await) {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+    let last = match read_last_unlocked_at(&app) {
+        Some(t) => t,
+        None => return Ok(false),
+    };
+    if (chrono::Utc::now() - last).num_seconds() > period {
+        tracing::info!("Prazo do desbloqueio automático expirou — exigindo senha");
+        CryptoService::clear_keychain();
+        return Ok(false);
+    }
+    let dek = match CryptoService::load_dek_from_keychain() {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!("Auto-unlock indisponível: {}", e);
+            return Ok(false);
+        }
+    };
+    state
+        .crypto
+        .unlock_with_dek(dek)
+        .map_err(|e| e.to_string())?;
+    record_last_access(&app);
+    Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::period_secs;
+
+    #[test]
+    fn prazos_em_segundos() {
+        assert_eq!(period_secs("week"), Some(7 * 24 * 3600));
+        assert_eq!(period_secs("month"), Some(30 * 24 * 3600));
+    }
+
+    #[test]
+    fn always_e_invalido_sem_prazo() {
+        assert_eq!(period_secs("always"), None);
+        assert_eq!(period_secs(""), None);
+        assert_eq!(period_secs("year"), None);
+    }
 }

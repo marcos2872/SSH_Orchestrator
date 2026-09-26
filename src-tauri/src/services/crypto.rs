@@ -262,6 +262,58 @@ impl CryptoService {
         Ok(())
     }
 
+    // ── Desbloqueio automático (keychain do SO) ─────────────────────────────
+    //
+    // Guarda a DEK no credential store do SO (Secret Service / Keychain /
+    // Credential Manager), protegido pelo login do usuário. Permite pular a
+    // tela de senha dentro do prazo configurado — opt-in explícito.
+
+    fn keyring_entry() -> Result<keyring::Entry> {
+        keyring::Entry::new("ssh-orchestrator", "vault-dek")
+            .map_err(|e| anyhow!("Falha ao acessar keychain: {}", e))
+    }
+
+    /// Salva a DEK atual (em memória) no keychain. Só funciona Unlocked.
+    pub fn store_dek_in_keychain(&self) -> Result<()> {
+        let dek = self.get_dek()?;
+        let entry = Self::keyring_entry()?;
+        entry
+            .set_password(&B64.encode(dek))
+            .map_err(|e| anyhow!("Falha ao salvar no keychain: {}", e))
+    }
+
+    /// Lê a DEK do keychain. Erro = ausente ou inválida (exige senha manual).
+    pub fn load_dek_from_keychain() -> Result<[u8; KEY_LEN]> {
+        let entry = Self::keyring_entry()?;
+        let raw = entry
+            .get_password()
+            .map_err(|e| anyhow!("DEK ausente no keychain: {}", e))?;
+        let bytes = B64
+            .decode(raw.trim())
+            .map_err(|_| anyhow!("DEK inválida no keychain"))?;
+        bytes
+            .try_into()
+            .map_err(|_| anyhow!("DEK inválida no keychain"))
+    }
+
+    /// Apaga a DEK do keychain (best-effort: ausência não é erro).
+    pub fn clear_keychain() {
+        if let Ok(entry) = Self::keyring_entry() {
+            let _ = entry.delete_credential();
+        }
+    }
+
+    /// Desbloqueia o estado em memória com uma DEK já validada (do keychain).
+    pub fn unlock_with_dek(&self, dek: [u8; KEY_LEN]) -> Result<()> {
+        let mut state = self.state.write().unwrap();
+        if !matches!(*state, VaultState::Locked) {
+            return Ok(());
+        }
+        *state = VaultState::Unlocked { dek };
+        tracing::info!("Vault unlocked via keychain");
+        Ok(())
+    }
+
     fn get_dek(&self) -> Result<[u8; KEY_LEN]> {
         let state = self.state.read().unwrap();
         match &*state {
@@ -667,5 +719,37 @@ mod tests {
         // JSON válido mas encrypted_dek curto demais
         let malformed = r#"{"salt":"AAAA","encrypted_dek":"AAAA"}"#;
         assert!(svc.import_vault(malformed, "qualquer").is_err());
+    }
+
+    // ── Keychain do SO ───────────────────────────────────────────────────────
+    // Depende de Secret Service (Linux) / Keychain / Credential Manager.
+    // Sem daemon disponível (ex.: CI headless), o teste é pulado.
+
+    #[test]
+    fn test_keychain_roundtrip_ou_pula_sem_daemon() {
+        let user = format!("vault-dek-test-{}", uuid::Uuid::new_v4());
+        let entry = match keyring::Entry::new("ssh-orchestrator", &user) {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("SKIP keychain: sem credential store ({})", e);
+                return;
+            }
+        };
+        let dek = [7u8; super::KEY_LEN];
+        let encoded = base64::engine::general_purpose::STANDARD.encode(dek);
+        if let Err(e) = entry.set_password(&encoded) {
+            eprintln!("SKIP keychain: gravação indisponível ({})", e);
+            return;
+        }
+        let raw = entry.get_password().expect("deve ler o que gravou");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(raw.trim())
+            .unwrap();
+        assert_eq!(
+            bytes,
+            dek.to_vec(),
+            "roundtrip do keychain deve preservar bytes"
+        );
+        let _ = entry.delete_credential();
     }
 }

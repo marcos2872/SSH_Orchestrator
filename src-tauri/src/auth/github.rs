@@ -27,6 +27,13 @@ struct TokenResponse {
 }
 
 pub async fn start_oauth_flow() -> Result<String> {
+    // Falha cedo com mensagem clara se a build saiu sem credenciais OAuth
+    if env!("GH_CLIENT_ID").trim().is_empty() || env!("GH_CLIENT_SECRET").trim().is_empty() {
+        return Err(anyhow::anyhow!(
+            "Login GitHub indisponível nesta build (credenciais OAuth ausentes)."
+        ));
+    }
+
     // 1. Generate state
     let state: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)

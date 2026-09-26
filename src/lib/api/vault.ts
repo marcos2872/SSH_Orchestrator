@@ -20,3 +20,14 @@ export const importSyncedVault = (password: string): Promise<void> =>
 
 export const getVaultLastAccess = (): Promise<string | null> =>
   invoke<string | null>("get_vault_last_access");
+
+export type UnlockFrequency = "always" | "week" | "month";
+
+export const getUnlockFrequency = (): Promise<UnlockFrequency> =>
+  invoke<UnlockFrequency>("get_unlock_frequency");
+
+export const setUnlockFrequency = (frequency: UnlockFrequency): Promise<void> =>
+  invoke<void>("set_unlock_frequency", { frequency });
+
+export const tryAutoUnlock = (): Promise<boolean> =>
+  invoke<boolean>("try_auto_unlock");

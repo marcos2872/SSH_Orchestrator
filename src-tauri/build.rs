@@ -8,6 +8,10 @@ fn main() {
     let client_id = std::env::var("GH_CLIENT_ID").unwrap_or_default();
     let client_secret = std::env::var("GH_CLIENT_SECRET").unwrap_or_default();
 
+    if client_id.is_empty() || client_secret.is_empty() {
+        println!("cargo:warning=GH_CLIENT_ID/GH_CLIENT_SECRET ausentes — login GitHub desabilitado neste build");
+    }
+
     println!("cargo:rustc-env=GH_CLIENT_ID={}", client_id);
     println!("cargo:rustc-env=GH_CLIENT_SECRET={}", client_secret);
 

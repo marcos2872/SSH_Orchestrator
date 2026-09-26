@@ -1,6 +1,6 @@
 # SSH Orchestrator
 
-[![Version](https://img.shields.io/badge/version-0.1.6-brightgreen)](https://github.com/marcos2872/SSH_Orchestrator/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.1.0-brightgreen)](https://github.com/marcos2872/SSH_Orchestrator/releases/latest)
 [![Tauri](https://img.shields.io/badge/Tauri-v2-blue?logo=tauri)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-1.77%2B-orange?logo=rust)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
