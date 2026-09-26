@@ -110,6 +110,7 @@ pub fn run() {
             handlers::pty::pty_kill,
             handlers::settings::get_setting,
             handlers::settings::set_setting,
+            handlers::app::check_app_update,
             sync::pull_workspace,
             sync::push_workspace,
         ])

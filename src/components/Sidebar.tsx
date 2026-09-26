@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { useToast } from "../hooks/useToast";
 import { useAuth } from "../hooks/useAuth";
+import { checkAppUpdate } from "../lib/api/app";
+import type { AppUpdateInfo } from "../lib/api/app";
 import Modal from "./Modal";
 import KeybindingsSection from "./Settings/KeybindingsSection";
 import type { CustomKeybindings } from "../hooks/useKeybindings";
@@ -82,6 +84,15 @@ const Sidebar: React.FC<Props> = ({
 
   // GitHub action in progress
   const [githubActionLoading, setGithubActionLoading] = useState(false);
+
+  // Versão instalada + verificação de update (consultada ao abrir o app)
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+
+  useEffect(() => {
+    checkAppUpdate()
+      .then(setUpdateInfo)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadWorkspaces();
@@ -694,10 +705,24 @@ const Sidebar: React.FC<Props> = ({
                     SSH Orchestrator
                   </p>
                   <p className="text-xs" style={{ color: "rgba(235,235,245,0.5)" }}>
-                    v0.1.0 · Tauri + React + Rust
+                    v{updateInfo?.current_version ?? "…"} · Tauri + React + Rust
                   </p>
                 </div>
               </div>
+              {updateInfo?.update_available && updateInfo.latest_version && (
+                <a
+                  href={updateInfo.release_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-xl transition-colors text-white"
+                  style={{ background: "#0a84ff" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "#409cff")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "#0a84ff")}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Nova versão {updateInfo.latest_version} disponível
+                </a>
+              )}
             </div>
           </div>
 
