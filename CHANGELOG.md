@@ -10,14 +10,16 @@ versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [0.1.0] - 2026-09-26
 
+Primeira release pública do SSH Orchestrator.
+
 ### Adicionado
 
 - **Terminal SSH** com tabs, split-pane horizontal/vertical e 6 temas (xterm.js)
 - **SFTP Dual-Pane** — gerenciador local ↔ remoto com seleção múltipla, transferência recursiva e fila com progresso
 - **Terminal Local** — shell nativo em aba dedicada via `portable-pty`
-- **Vault Zero-Knowledge** — AES-256-GCM + PBKDF2, com desbloqueio automático opcional (todas as vezes, 1 semana ou 1 mês via keychain do SO)
+- **Vault Zero-Knowledge** — AES-256-GCM + PBKDF2 (100k iterações), com desbloqueio automático opcional (todas as vezes, 1 semana ou 1 mês via keychain do SO)
 - **Sync via GitHub** — workspaces e servidores entre dispositivos via repositório privado, merge CRDT (LWW-Register + HLC)
-- **Autenticação SSH flexível** — senha ou chave PEM com passphrase, verificação TOFU de host-key
+- **Autenticação SSH flexível** — senha ou chave PEM com passphrase opcional, verificação TOFU de host-key
 - **Teclas de atalho configuráveis** com detecção de conflitos
 - **Verificação de atualizações** — versão dinâmica e botão de nova release nas Configurações
-- **Alças de redimensionamento** na janela frameless e UI kit padronizado (Lucide, PT-BR)
+- **Janela frameless** com alças de redimensionamento e UI padronizada (Lucide, PT-BR)
