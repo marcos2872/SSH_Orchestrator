@@ -1,6 +1,6 @@
 # SSH Orchestrator
 
-[![Version](https://img.shields.io/badge/version-0.1.0-brightgreen)](https://github.com/marcos2872/SSH_Orchestrator/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.1.5-brightgreen)](https://github.com/marcos2872/SSH_Orchestrator/releases/latest)
 [![Tauri](https://img.shields.io/badge/Tauri-v2-blue?logo=tauri)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-1.77%2B-orange?logo=rust)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
@@ -12,17 +12,21 @@ Cliente SSH/SFTP cross-platform com sincronização de workspaces via GitHub e v
 
 ## Screenshots
 
-| Vault | Workspaces |
+| Vault | Tela inicial |
 |:---:|:---:|
-| ![Vault](./app-images/1.png) | ![Workspaces](./app-images/2.png) |
+| ![Vault](./app-images/1.png) | ![Tela inicial](./app-images/2.png) |
 
-| Servidores | Terminal SSH |
+| Workspace e servidores | Terminal SSH |
 |:---:|:---:|
-| ![Servidores](./app-images/3.png) | ![Terminal](./app-images/4.png) |
+| ![Workspace e servidores](./app-images/3.png) | ![Terminal SSH](./app-images/4.png) |
 
-| Split Pane + Terminal Local | SFTP Dual-Pane |
+| SFTP Dual-Pane | Abas + Terminal Local |
 |:---:|:---:|
-| ![Split](./app-images/5.png) | ![SFTP](./app-images/6.png) |
+| ![SFTP](./app-images/5.png) | ![Terminal Local](./app-images/6.png) |
+
+| Configurações |
+|:---:|
+| ![Configurações](./app-images/7.png) |
 
 ---
 
