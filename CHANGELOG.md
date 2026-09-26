@@ -8,6 +8,28 @@ versionamento segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 > Para lançar uma nova versão: mova as mudanças de `[Unreleased]` para uma nova
 > seção `## [X.Y.Z] - AAAA-MM-DD` e crie a tag `vX.Y.Z` (ver workflow `.github/workflows/release.yml`).
 
+## [0.1.6] - 2026-09-26
+
+### Adicionado
+
+- **Alças de redimensionamento**: 8 zonas invisíveis nas bordas e quinas da janela frameless, com cursor e arrasto nativo via `startResizeDragging`
+- **Verificação de atualizações**: ao abrir o app, compara a versão instalada com a última release do GitHub; seção Sobre mostra a versão dinâmica e botão "Nova versão" para a página da release
+- **UI kit compartilhado** (`src/components/ui/`): Button, IconButton, TextInput, Toggle, SectionLabel e Spinner padronizados
+- **Erros amigáveis**: falhas de conexão e arquivo traduzidas para PT-BR em vez do texto bruto do backend
+- **CTAs no estado vazio**: botões "Nova aba" e "Terminal local" na tela inicial
+
+### Alterado
+
+- **Ícones**: todos os emojis da interface trocados por Lucide (toolbar, abas, SFTP, transferências, vault)
+- **Textos**: nome único "SSH Orchestrator", "Excluir" em toda a UI, foco e estados de loading padronizados
+- **Fluxos**: troca de workspace liberada com abas abertas, seletor de servidor lista todos os workspaces agrupados quando nenhum está selecionado
+- **SFTP**: reaproveita a sessão SSH de um terminal já conectado no mesmo servidor, sem pedir senha de novo
+- **Animações do modal** e utilitário `scrollbar-none` corrigidos (classes referenciavam plugin inexistente)
+
+### Removido
+
+- Componente legado `SftpPanel` (452 linhas sem uso) e atalho inativo `TOGGLE_SFTP`
+
 ## [0.1.5] - 2026-08-10
 
 ### Alterado
