@@ -6,6 +6,7 @@ import ServerPickerModal from "./components/Terminal/ServerPickerModal";
 import { ToastProvider } from "./hooks/useToast";
 import ToastContainer from "./components/Toast";
 import TitleBar from "./components/TitleBar";
+import ResizeHandles from "./components/ResizeHandles";
 import VaultGuard from "./components/VaultGuard";
 import { useTerminalManager } from "./hooks/useTerminalManager";
 import { useTerminalTheme } from "./hooks/useTerminalTheme";
@@ -154,6 +155,7 @@ const App: React.FC = () => {
     <ToastProvider>
       <VaultGuard>
         <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
+          <ResizeHandles />
           <TitleBar />
           <div className="flex flex-1 overflow-hidden relative">
             <Sidebar
