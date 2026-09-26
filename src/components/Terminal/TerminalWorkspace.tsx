@@ -66,9 +66,24 @@ const TerminalWorkspace: React.FC<Props> = ({
     }
 
     if (tab.type === "sftp") {
+      // Reaproveita a sessão SSH de um terminal já conectado no mesmo servidor
+      const reusedSessionId =
+        tab.server
+          ? (tabs.find(
+              (t) =>
+                t.type === "terminal" &&
+                t.server?.id === tab.server?.id &&
+                t.sshSessionId,
+            )?.sshSessionId ?? null)
+          : null;
       return (
         <div className="flex-1 overflow-hidden">
-          {tab.server && <SftpDualPane server={tab.server} />}
+          {tab.server && (
+            <SftpDualPane
+              server={tab.server}
+              existingSshSessionId={reusedSessionId}
+            />
+          )}
         </div>
       );
     }

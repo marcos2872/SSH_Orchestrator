@@ -5,12 +5,14 @@ import {
     sftpCloseSession, sftpWorkdir, sftpHomeDir,
     sftpDelete, sftpRename, sftpMkdir,
     sftpDeleteLocal, sftpRenameLocal, sftpMkdirLocal,
+    sftpOpenSession,
     type SftpEntry, type LocalEntry,
 } from '../../lib/api/sftp';
+import { friendlyError } from '../../lib/errors';
 import { useSftpQueue } from '../../hooks/useSftpQueue';
 import TransferQueue from './TransferQueue';
 import type { Server } from '../../hooks/useTerminalManager';
-import { FolderPlus, Trash2, Pencil, RefreshCw } from 'lucide-react';
+import { FolderPlus, Trash2, Pencil, RefreshCw, Monitor, Globe, Folder, File, AlertTriangle, ArrowDown } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,8 @@ interface DragItem {
 
 interface Props {
     server: Server;
+    /** Sessão SSH já conectada no mesmo servidor (reaproveitada sem nova senha) */
+    existingSshSessionId?: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -39,7 +43,7 @@ const fmt = (bytes: number) => {
 
 interface PaneProps {
     title: string;
-    icon: string;
+    icon: React.ReactNode;
     cwd: string;
     entries: Array<{ name: string; path: string; is_dir: boolean; size: number }>;
     loading: boolean;
@@ -89,7 +93,7 @@ const FilePane: React.FC<PaneProps> = ({
                 }}
             >
                 <div className="flex items-center gap-2">
-                    <span className="text-base">{icon}</span>
+                    <span className="shrink-0 flex" style={{ color: "rgba(255,255,255,0.55)" }}>{icon}</span>
                     <span className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.75)" }}>{title}</span>
                     {selCount > 1 && (
                         <span
@@ -125,7 +129,7 @@ const FilePane: React.FC<PaneProps> = ({
                     <button
                         onClick={() => selCount > 0 && onDelete([...selected])}
                         disabled={selCount === 0}
-                        title={selCount > 1 ? `Deletar ${selCount} itens` : 'Deletar'}
+                        title={selCount > 1 ? `Excluir ${selCount} itens` : 'Excluir'}
                         className="p-1 rounded-lg transition-colors disabled:opacity-30"
                         style={{ color: "rgba(255,255,255,0.4)" }}
                         onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#ff453a"; } }}
@@ -136,7 +140,7 @@ const FilePane: React.FC<PaneProps> = ({
                     <div className="w-px h-3 mx-1" style={{ background: "rgba(255,255,255,0.1)" }} />
                     <button
                         onClick={onRefresh}
-                        title="Sincronizar"
+                        title="Atualizar"
                         className="p-1 rounded-lg transition-colors"
                         style={{ color: "rgba(255,255,255,0.4)" }}
                         onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#0a84ff"; }}
@@ -178,7 +182,9 @@ const FilePane: React.FC<PaneProps> = ({
                     <div className="flex items-center justify-center h-20 text-xs animate-pulse" style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</div>
                 )}
                 {error && (
-                    <div className="p-3 text-xs" style={{ color: "#ff453a" }}>⚠ {error}</div>
+                    <div className="p-3 text-xs flex items-center gap-1.5" style={{ color: "#ff453a" }}>
+                        <AlertTriangle size={12} className="shrink-0" /> {error}
+                    </div>
                 )}
 
                 {/* ".." parent entry */}
@@ -190,7 +196,7 @@ const FilePane: React.FC<PaneProps> = ({
                         onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
                         onDoubleClick={() => onNavigate(parent)}
                     >
-                        <span>📂</span>
+                        <Folder size={14} className="shrink-0" />
                         <span className="font-mono">..</span>
                     </div>
                 )}
@@ -217,7 +223,11 @@ const FilePane: React.FC<PaneProps> = ({
                             }}
                             data-index={idx}
                         >
-                            <span className="shrink-0">{entry.is_dir ? '📂' : '📄'}</span>
+                            <span className="shrink-0 flex">
+                                {entry.is_dir
+                                    ? <Folder size={14} style={{ color: "#64d2ff" }} />
+                                    : <File size={14} style={{ color: "rgba(255,255,255,0.45)" }} />}
+                            </span>
                             <span className="flex-1 font-mono truncate">{entry.name}</span>
                             {!entry.is_dir && (
                                 <span className="shrink-0" style={{ color: "rgba(255,255,255,0.5)" }}>{fmt(entry.size)}</span>
@@ -234,14 +244,14 @@ const FilePane: React.FC<PaneProps> = ({
             {/* Drop hint */}
             {dropTarget && (
                 <div
-                    className="px-3 py-2 text-xs text-center animate-pulse shrink-0"
+                    className="px-3 py-2 text-xs text-center animate-pulse shrink-0 flex items-center justify-center gap-1"
                     style={{
                         color: "#0a84ff",
                         background: "rgba(10,132,255,0.08)",
                         borderTop: "0.5px solid rgba(10,132,255,0.3)",
                     }}
                 >
-                    ↓ Solte aqui para {side === 'local' ? 'fazer download' : 'fazer upload'}
+                    <ArrowDown size={12} /> Solte aqui para {side === 'local' ? 'fazer download' : 'fazer upload'}
                 </div>
             )}
         </div>
@@ -250,7 +260,7 @@ const FilePane: React.FC<PaneProps> = ({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const SftpDualPane: React.FC<Props> = ({ server }) => {
+const SftpDualPane: React.FC<Props> = ({ server, existingSshSessionId = null }) => {
     // Connection state
     const [sftp, setSftp] = useState<string | null>(null);
     const [connState, setConnState] = useState<'connecting' | 'prompt' | 'connected' | 'error'>('connecting');
@@ -317,7 +327,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
             setLocalEntries(entries);
             setLocalCwd(path);
         } catch (e) {
-            setLocalError(String(e));
+            setLocalError(friendlyError(e));
         } finally {
             setLocalLoading(false);
         }
@@ -341,13 +351,33 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
             setRemoteEntries(entries);
             setRemoteCwd(path);
         } catch (e) {
-            setRemoteError(String(e));
+            setRemoteError(friendlyError(e));
         } finally {
             setRemoteLoading(false);
         }
     }, [sftp]);
 
     // ── Connect ───────────────────────────────────────────────────────────────
+    // Carrega a pasta inicial remota após estabelecer a sessão SFTP
+    const loadRemoteHome = useCallback(async (id: string) => {
+        try {
+            const wDir = await sftpWorkdir(id);
+            setRemoteLoading(true);
+            setRemoteError(null);
+            try {
+                const entries = await sftpListDir(id, wDir);
+                setRemoteEntries(entries);
+                setRemoteCwd(wDir);
+            } catch (e) {
+                setRemoteError(friendlyError(e));
+            } finally {
+                setRemoteLoading(false);
+            }
+        } catch {
+            setRemoteCwd('/');
+        }
+    }, []);
+
     // `pw` is only provided when the user types a password manually at the prompt.
     // When null, the backend resolves credentials from the vault (saved password or SSH key).
     const doConnect = useCallback(async (pw: string | null) => {
@@ -363,39 +393,39 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
             }
             setSftp(id);
             setConnState('connected');
-
-            // Get remote home
-            try {
-                const wDir = await sftpWorkdir(id);
-                setRemoteCwd(wDir);
-                // Call listRemote directly with the new ID to avoid dependency on sftp state
-                setRemoteLoading(true);
-                setRemoteError(null);
-                try {
-                    const entries = await sftpListDir(id, wDir);
-                    setRemoteEntries(entries);
-                    setRemoteCwd(wDir);
-                } catch (e) {
-                    setRemoteError(String(e));
-                } finally {
-                    setRemoteLoading(false);
-                }
-            } catch {
-                listRemote('/'); // fallback
-            }
+            await loadRemoteHome(id);
         } catch (e) {
             if (cancelConnectRef.current) return; // ignore errors after unmount
             setConnState('error');
-            setConnError(String(e));
+            setConnError(friendlyError(e));
         }
-    }, [server, sftp, listRemote]);
+    }, [server, sftp, loadRemoteHome]);
 
     useEffect(() => {
-        if (server.has_saved_password || server.has_saved_ssh_key) {
-            doConnect(null).catch(() => setConnState('prompt'));
-        } else {
-            setConnState('prompt');
-        }
+        const connect = async () => {
+            // Reaproveita terminal SSH já conectado (sem pedir senha de novo)
+            if (existingSshSessionId) {
+                try {
+                    const id = await sftpOpenSession(existingSshSessionId);
+                    if (cancelConnectRef.current) {
+                        sftpCloseSession(id);
+                        return;
+                    }
+                    setSftp(id);
+                    setConnState('connected');
+                    await loadRemoteHome(id);
+                    return;
+                } catch {
+                    // Sessão reaproveitada inválida — cai para o fluxo normal
+                }
+            }
+            if (server.has_saved_password || server.has_saved_ssh_key) {
+                doConnect(null).catch(() => setConnState('prompt'));
+            } else {
+                setConnState('prompt');
+            }
+        };
+        connect().catch(() => setConnState('prompt'));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [server.id]);
 
@@ -549,7 +579,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 await listRemote(remoteCwd);
             }
         } catch (e) {
-            const err = String(e);
+            const err = friendlyError(e);
             if (side === 'local') setLocalError(err);
             else setRemoteError(err);
         }
@@ -579,7 +609,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
             targetPath: paths[0],
             targetPaths: paths,
             inputValue: '',
-            description: `Tem certeza que deseja deletar "${name}"?`,
+            description: `Tem certeza que deseja excluir "${name}"?`,
         });
     }, []);
 
@@ -618,7 +648,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
             targetPath: paths[0],
             targetPaths: paths,
             inputValue: '',
-            description: `Tem certeza que deseja deletar "${name}"?`,
+            description: `Tem certeza que deseja excluir "${name}"?`,
         });
     }, []);
 
@@ -706,7 +736,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 <div className="flex-1 min-w-0" style={{ borderRight: "0.5px solid rgba(255,255,255,0.06)" }}>
                     <FilePane
                         title="Local"
-                        icon="🖥"
+                        icon={<Monitor size={14} />}
                         side="local"
                         cwd={localCwd}
                         entries={localEntries}
@@ -782,7 +812,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                 <div className="flex-1 min-w-0" style={{ borderLeft: "0.5px solid rgba(255,255,255,0.06)" }}>
                     <FilePane
                         title={`Remoto — ${server.host}`}
-                        icon="🌐"
+                        icon={<Globe size={14} />}
                         side="remote"
                         cwd={remoteCwd}
                         entries={remoteEntries}
@@ -814,7 +844,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
             <Modal
                 isOpen={modal.isOpen}
                 onClose={() => setModal(prev => ({ ...prev, isOpen: false }))}
-                title={modal.type === 'rename' ? 'Renomear' : modal.type === 'delete' ? 'Deletar' : 'Nova Pasta'}
+                title={modal.type === 'rename' ? 'Renomear' : modal.type === 'delete' ? 'Excluir' : 'Nova Pasta'}
                 icon={
                     modal.type === 'rename' ? <Pencil size={18} style={{ color: "#0a84ff" }} /> :
                         modal.type === 'delete' ? <Trash2 size={18} style={{ color: "#ff453a" }} /> :
@@ -869,7 +899,7 @@ const SftpDualPane: React.FC<Props> = ({ server }) => {
                                     : '0 4px 12px rgba(10,132,255,0.3)',
                             }}
                         >
-                            {modal.type === 'delete' ? 'Deletar' : modal.type === 'rename' ? 'Salvar' : 'Criar'}
+                            {modal.type === 'delete' ? 'Excluir' : modal.type === 'rename' ? 'Salvar' : 'Criar'}
                         </button>
                     </div>
                 </div>

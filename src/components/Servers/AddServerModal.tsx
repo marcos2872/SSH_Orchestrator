@@ -3,6 +3,7 @@ import { createServer, updateServer, Server } from '../../lib/api/servers';
 import { Eye, EyeOff, Key, Lock, Server as ServerIcon } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import Modal from '../Modal';
+import { SectionLabel, Toggle as UiToggle } from '../ui';
 
 interface Props {
     workspaceId: string;
@@ -175,12 +176,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
 
                 {/* Credentials section */}
                 <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.08)' }} className="pt-4">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Lock className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.35)" }} />
-                        <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.4)" }}>
-                            Credenciais SSH
-                        </span>
-                    </div>
+                    <SectionLabel icon={<Lock />}>Credenciais SSH</SectionLabel>
 
                     {/* Auth method toggle — Apple segmented control style */}
                     <div
@@ -255,7 +251,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                                 </div>
                             </Field>
 
-                            <Toggle
+                            <UiToggle
                                 checked={savePassword}
                                 onChange={setSavePassword}
                                 label="Salvar senha encriptada"
@@ -291,7 +287,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                                 />
                             </Field>
 
-                            <Toggle
+                            <UiToggle
                                 checked={saveSshKey}
                                 onChange={setSaveSshKey}
                                 label="Salvar chave encriptada"
@@ -330,7 +326,7 @@ const AddServerModal: React.FC<Props> = ({ workspaceId, server, onClose, onSaved
                             </Field>
 
                             {sshKeyPassphrase && (
-                                <Toggle
+                                <UiToggle
                                     checked={saveSshKeyPassphrase}
                                     onChange={setSaveSshKeyPassphrase}
                                     label="Salvar passphrase encriptada"
@@ -398,39 +394,6 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
             return child;
         })}
     </div>
-);
-
-interface ToggleProps {
-    checked: boolean;
-    onChange: (v: boolean) => void;
-    label: string;
-    description: string;
-}
-
-const Toggle: React.FC<ToggleProps> = ({ checked, onChange, label, description }) => (
-    <label className="flex items-start gap-3 cursor-pointer group">
-        <div className="relative mt-0.5 shrink-0">
-            <input
-                type="checkbox"
-                checked={checked}
-                onChange={e => onChange(e.target.checked)}
-                className="sr-only"
-            />
-            <div
-                className="w-10 h-[22px] rounded-full transition-colors"
-                style={{ background: checked ? '#0a84ff' : 'rgba(255,255,255,0.15)' }}
-            >
-                <div
-                    className="w-[18px] h-[18px] bg-white rounded-full shadow-md absolute top-0.5 transition-transform"
-                    style={{ transform: checked ? 'translateX(20px)' : 'translateX(2px)' }}
-                />
-            </div>
-        </div>
-        <div>
-            <p className="text-sm font-medium text-white/75 group-hover:text-white/95 transition-colors">{label}</p>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(235,235,245,0.35)' }}>{description}</p>
-        </div>
-    </label>
 );
 
 export default AddServerModal;

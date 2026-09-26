@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Hourglass, Loader2, Check, ArrowUp, ArrowDown, Folder } from 'lucide-react';
 import type { QueueItem } from '../../hooks/useSftpQueue';
 
 interface Props {
@@ -22,11 +22,13 @@ const statusColor: Record<QueueItem['status'], string> = {
     error: '#ff453a',
 };
 
-const statusIcon: Record<QueueItem['status'], string> = {
-    pending: '⏳',
-    active: '⟳',
-    done: '✓',
-    error: '✕',
+const statusIcon = (status: QueueItem['status']): React.ReactNode => {
+    switch (status) {
+        case 'pending': return <Hourglass size={12} />;
+        case 'active': return <Loader2 size={12} className="animate-spin" />;
+        case 'done': return <Check size={12} />;
+        case 'error': return <X size={12} />;
+    }
 };
 
 const TransferQueue: React.FC<Props> = ({ queue, onCancel, onClearDone }) => {
@@ -111,20 +113,20 @@ const TransferQueue: React.FC<Props> = ({ queue, onCancel, onClearDone }) => {
                         >
                             {/* Direction arrow */}
                             <span
-                                className="shrink-0 text-xs font-mono w-4 text-center"
+                                className="shrink-0 w-4 flex items-center justify-center"
                                 style={{ color: statusColor[item.status] }}
                             >
-                                {item.direction === 'upload' ? '↑' : '↓'}
+                                {item.direction === 'upload' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
                             </span>
 
                             {/* Name + bar */}
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2 mb-1">
                                     <span
-                                        className="text-xs font-mono truncate"
+                                        className="text-xs font-mono truncate flex items-center gap-1"
                                         style={{ color: 'rgba(255,255,255,0.7)', maxWidth: '200px' }}
                                     >
-                                        {item.isDir ? '📂 ' : ''}{item.name}
+                                        {item.isDir && <Folder size={11} className="shrink-0" />}{item.name}
                                     </span>
                                     <span
                                         className="text-[10px] shrink-0"
@@ -186,10 +188,10 @@ const TransferQueue: React.FC<Props> = ({ queue, onCancel, onClearDone }) => {
                                     </button>
                                 ) : (
                                     <span
-                                        className="text-xs"
+                                        className="flex items-center"
                                         style={{ color: statusColor[item.status] }}
                                     >
-                                        {statusIcon[item.status]}
+                                        {statusIcon(item.status)}
                                     </span>
                                 )}
                             </div>

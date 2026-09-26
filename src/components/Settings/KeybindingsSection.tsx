@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, AlertTriangle } from "lucide-react";
 import type { KeyBinding, KeyAction } from "../../lib/keybindings";
 import type { CustomKeybindings } from "../../hooks/useKeybindings";
 
@@ -16,10 +16,7 @@ const LABELS: Record<KeyAction, string> = {
   PREV_TAB:    "Aba anterior",
   SPLIT_H:     "Split horizontal",
   SPLIT_V:     "Split vertical",
-  TOGGLE_SFTP: "Toggle SFTP",
 };
-
-// Ações exibidas na UI (TOGGLE_SFTP não está mais ativo)
 const SHOWN: KeyAction[] = [
   "NEW_TAB", "CLOSE_TAB", "NEXT_TAB", "PREV_TAB", "SPLIT_H", "SPLIT_V",
 ];
@@ -40,12 +37,7 @@ function formatBinding(b: KeyBinding): string {
   if (b.meta)  parts.push("Super");
   if (b.alt)   parts.push("Alt");
   if (b.shift) parts.push("Shift");
-  // Guarda adicional: se a key salva for um nome de modificador, exibe aviso
-  if (KNOWN_MODIFIER_VALUES.has(b.key)) {
-    parts.push(`⚠️${b.key}`);
-  } else {
-    parts.push(b.key === " " ? "Espaço" : b.key);
-  }
+  parts.push(b.key === " " ? "Espaço" : b.key);
   return parts.join("+");
 }
 
@@ -101,13 +93,16 @@ function IdleState({
   return (
     <div className="flex items-center gap-2 shrink-0">
       <kbd
-        className="text-xs px-2 py-0.5 rounded-lg font-mono"
+        className="text-xs px-2 py-0.5 rounded-lg font-mono inline-flex items-center gap-1"
         style={{
           background: "rgba(255,255,255,0.08)",
           border: "0.5px solid rgba(255,255,255,0.15)",
           color: conflict ? "#ff9f0a" : "rgba(255,255,255,0.7)",
         }}
       >
+        {KNOWN_MODIFIER_VALUES.has(binding.key) && (
+          <AlertTriangle className="w-3 h-3" style={{ color: "#ff9f0a" }} />
+        )}
         {formatBinding(binding)}
       </kbd>
       <button

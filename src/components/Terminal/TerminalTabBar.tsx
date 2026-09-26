@@ -1,4 +1,5 @@
 import React from "react";
+import { SquareTerminal, ArrowLeftRight, X } from "lucide-react";
 import type { Tab } from "../../hooks/useTerminalManager";
 
 interface Props {
@@ -30,7 +31,11 @@ const TerminalTabBar: React.FC<Props> = ({
         const isLocal = tab.type === "local";
         const isSftp = tab.type === "sftp";
 
-        const icon = isLocal ? "⬛" : isSftp ? "📁" : "";
+        const icon = isLocal ? (
+          <SquareTerminal className="w-3 h-3 shrink-0" />
+        ) : isSftp ? (
+          <ArrowLeftRight className="w-3 h-3 shrink-0" />
+        ) : null;
         const label = isLocal
           ? "Local Shell"
           : tab.server
@@ -70,13 +75,9 @@ const TerminalTabBar: React.FC<Props> = ({
               className="w-1.5 h-1.5 rounded-full shrink-0"
               style={{ background: dotColor }}
             />
-            {icon && (
-              <span className="text-[10px] leading-none shrink-0">{icon}</span>
-            )}
+            {icon}
             <span className="max-w-[130px] truncate">{label}</span>
-            <span
-              role="button"
-              tabIndex={-1}
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 onClose(tab.id);
@@ -86,9 +87,10 @@ const TerminalTabBar: React.FC<Props> = ({
                 color: isActive ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.4)",
               }}
               title="Fechar aba"
+              aria-label={`Fechar aba ${label}`}
             >
-              ✕
-            </span>
+              <X className="w-3 h-3" />
+            </button>
           </button>
         );
       })}

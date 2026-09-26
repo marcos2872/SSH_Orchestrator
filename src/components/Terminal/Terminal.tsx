@@ -10,6 +10,7 @@ import { Terminal as XTerm, IDisposable } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import { getTheme } from "../../lib/themes";
+import { friendlyError } from "../../lib/errors";
 import Modal from "../Modal";
 
 export interface TerminalRef {
@@ -221,7 +222,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
         onSessionId?.(sessionId);
         xtermRef.current?.focus();
       } catch (err) {
-        term?.writeln(`\x1b[1;31m[✗] Erro: ${String(err)}\x1b[0m`);
+        term?.writeln(`\x1b[1;31m[✗] Erro: ${friendlyError(err)}\x1b[0m`);
         setConnState("error");
       }
     };
@@ -264,7 +265,7 @@ const Terminal = React.forwardRef<TerminalRef, Props>(
         onSessionId?.(sessionId);
         xtermRef.current?.focus();
       } catch (err) {
-        term?.writeln(`\x1b[1;31m[✗] Erro: ${String(err)}\x1b[0m`);
+        term?.writeln(`\x1b[1;31m[✗] Erro: ${friendlyError(err)}\x1b[0m`);
         setConnState("error");
       }
     };

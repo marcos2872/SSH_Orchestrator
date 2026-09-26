@@ -14,6 +14,8 @@ import { useKeybindings } from "./hooks/useKeybindings";
 import { matchesBinding } from "./lib/keybindings";
 import type { Server } from "./hooks/useTerminalManager";
 import type { Server as ApiServer } from "./lib/api/servers";
+import { Plus, ArrowLeftRight, SquareTerminal, X } from "lucide-react";
+import { Button } from "./components/ui";
 
 interface Workspace {
   id: string;
@@ -135,7 +137,6 @@ const App: React.FC = () => {
         }
         return;
       }
-      // SFTP agora é uma aba dedicada — atalho TOGGLE_SFTP não se aplica
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -183,7 +184,7 @@ const App: React.FC = () => {
                     />
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-slate-400">
-                      <div className="text-center">
+                      <div className="text-center max-w-sm">
                         <div className="w-24 h-24 mx-auto mb-8 bg-slate-800/50 rounded-full flex items-center justify-center border border-slate-700">
                           <img
                             src="/icon.png"
@@ -194,9 +195,27 @@ const App: React.FC = () => {
                         <h2 className="text-xl font-light tracking-widest text-slate-300 mb-2">
                           ORCHESTRATOR READY
                         </h2>
-                        <p className="text-sm font-light tracking-wide text-slate-400">
-                          Selecione um Workspace para gerenciar seus servidores
+                        <p className="text-sm font-light tracking-wide text-slate-400 mb-8">
+                          {selectedWorkspace
+                            ? "Abra uma conexão ou gerencie este workspace"
+                            : "Selecione um Workspace para gerenciar seus servidores"}
                         </p>
+                        <div className="flex items-center justify-center gap-3">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setPickerMode("tab");
+                              setShowServerPicker(true);
+                            }}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Nova aba
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => openLocalTab()}>
+                            <SquareTerminal className="w-3.5 h-3.5" />
+                            Terminal local
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -217,7 +236,7 @@ const App: React.FC = () => {
                           title="Nova aba"
                           className="flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
                         >
-                          <span className="text-base leading-none">＋</span>
+                          <Plus className="w-3.5 h-3.5" />
                           <span>Nova aba</span>
                         </button>
                         <button
@@ -228,7 +247,7 @@ const App: React.FC = () => {
                           title="Painel SFTP"
                           className="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
                         >
-                          <span>📁</span>
+                          <ArrowLeftRight className="w-3.5 h-3.5" />
                           <span>SFTP</span>
                         </button>
                         <button
@@ -236,7 +255,7 @@ const App: React.FC = () => {
                           title="Terminal local"
                           className="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
                         >
-                          <span>⬛</span>
+                          <SquareTerminal className="w-3.5 h-3.5" />
                           <span>Local</span>
                         </button>
                       </div>
@@ -286,10 +305,11 @@ const App: React.FC = () => {
                         </div>
                         <button
                           onClick={closeAll}
-                          className="text-xs text-slate-400 hover:text-red-400 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
+                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
                           title="Fechar tudo"
                         >
-                          ✕ tudo
+                          <X className="w-3.5 h-3.5" />
+                          Fechar tudo
                         </button>
                       </div>
                     </div>

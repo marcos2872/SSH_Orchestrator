@@ -14,8 +14,7 @@ export type KeyAction =
   | "NEXT_TAB"
   | "PREV_TAB"
   | "SPLIT_H"
-  | "SPLIT_V"
-  | "TOGGLE_SFTP";
+  | "SPLIT_V";
 
 /** Mapa de atalhos padrão — usado como fallback quando nenhuma config está salva. */
 export const DEFAULT_KEYBINDINGS: Record<KeyAction, KeyBinding> = {
@@ -25,7 +24,6 @@ export const DEFAULT_KEYBINDINGS: Record<KeyAction, KeyBinding> = {
   PREV_TAB:    { key: "Tab",  ctrl: true, shift: true,  description: "Aba anterior" },
   SPLIT_H:     { key: "\\",  ctrl: true,               description: "Split horizontal" },
   SPLIT_V:     { key: "\\",  ctrl: true, shift: true,  description: "Split vertical" },
-  TOGGLE_SFTP: { key: "b",    ctrl: true,               description: "Toggle painel SFTP" },
 };
 
 /** Alias para compatibilidade com código existente. */

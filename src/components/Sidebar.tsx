@@ -25,6 +25,8 @@ import {
   Loader2,
   ExternalLink,
   Lock,
+  LockOpen,
+  ShieldAlert,
   Keyboard,
 } from "lucide-react";
 import { useToast } from "../hooks/useToast";
@@ -33,6 +35,7 @@ import { checkAppUpdate } from "../lib/api/app";
 import type { AppUpdateInfo } from "../lib/api/app";
 import Modal from "./Modal";
 import KeybindingsSection from "./Settings/KeybindingsSection";
+import { SectionLabel } from "./ui";
 import type { CustomKeybindings } from "../hooks/useKeybindings";
 import type { KeyBinding, KeyAction } from "../lib/keybindings";
 
@@ -237,7 +240,7 @@ const Sidebar: React.FC<Props> = ({
           {!collapsed && (
             <h1 className="text-[15px] font-semibold flex items-center gap-2 whitespace-nowrap overflow-hidden text-white/90">
               <Activity className="text-primary w-5 h-5 shrink-0" />
-              SSH Config
+              SSH Orchestrator
             </h1>
           )}
           {collapsed && <Activity className="text-primary w-5 h-5 shrink-0" />}
@@ -260,12 +263,11 @@ const Sidebar: React.FC<Props> = ({
           <div className="flex flex-col items-center gap-2 pt-3 flex-1 overflow-y-auto">
             {/* Expand button */}
             <button
-              onClick={() => { if (hasTabs) return; setCollapsed(false); }}
-              title={hasTabs ? "Feche as conexões ativas para expandir" : "Expandir sidebar"}
-              disabled={hasTabs}
-              className={`p-2 rounded-lg transition-colors mb-1 ${hasTabs ? 'opacity-40 cursor-not-allowed' : ''}`}
+              onClick={() => setCollapsed(false)}
+              title="Expandir sidebar"
+              className="p-2 rounded-lg transition-colors mb-1"
               style={{ color: "rgba(255,255,255,0.55)" }}
-              onMouseEnter={e => { if (!hasTabs) e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
               <ChevronRight className="w-4 h-4" />
@@ -275,18 +277,14 @@ const Sidebar: React.FC<Props> = ({
             {workspaces.map((ws) => (
               <button
                 key={ws.id}
-                title={hasTabs ? `${ws.name} — feche as conexões ativas para trocar de workspace` : ws.name}
+                title={ws.name}
                 onClick={() => {
-                  if (hasTabs) {
-                    toast.info("Feche as conexões ativas para trocar de workspace.");
-                    return;
-                  }
                   onSelectWorkspace(ws);
                   setCollapsed(false);
                 }}
                 className={`
                   w-8 h-8 rounded-xl flex items-center justify-center transition-all
-                  ${hasTabs ? "opacity-40 cursor-not-allowed" : selectedId === ws.id ? "ring-2 ring-white/25 scale-110" : "hover:scale-110"}
+                  ${selectedId === ws.id ? "ring-2 ring-white/25 scale-110" : "hover:scale-110"}
                 `}
                 style={{
                   backgroundColor: ws.color + "25",
@@ -302,19 +300,17 @@ const Sidebar: React.FC<Props> = ({
               </button>
             ))}
 
-            {/* New workspace (collapsed) — oculto quando há conexões ativas */}
-            {!hasTabs && (
-              <button
-                onClick={handleCreateWorkspace}
-                title="Novo Workspace"
-                className="p-2 rounded-lg transition-colors mt-auto mb-3"
+            {/* New workspace (collapsed) */}
+            <button
+              onClick={handleCreateWorkspace}
+              title="Novo Workspace"
+              className="p-2 rounded-lg transition-colors mt-auto mb-3"
                 style={{ color: "rgba(255,255,255,0.3)" }}
                 onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               >
                 <Plus className="w-4 h-4" />
               </button>
-            )}
           </div>
         )}
 
@@ -325,12 +321,6 @@ const Sidebar: React.FC<Props> = ({
               <div className="flex items-center justify-between mb-3 px-2">
                 <span className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
                   Workspaces
-                  {hasTabs && (
-                    <Lock
-                      className="w-2.5 h-2.5"
-                      style={{ color: "rgba(235,235,245,0.5)" }}
-                    />
-                  )}
                 </span>
                 <button
                   onClick={handleCreateWorkspace}
@@ -395,26 +385,27 @@ const Sidebar: React.FC<Props> = ({
                     </div>
                   ) : (
                     <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Selecionar workspace ${ws.name}`}
                       onClick={() => {
-                        if (hasTabs) {
-                          toast.info("Feche as conexões ativas para trocar de workspace.");
-                          return;
-                        }
                         setMenuOpenId(null);
                         onSelectWorkspace(ws);
                       }}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl transition-all"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setMenuOpenId(null);
+                          onSelectWorkspace(ws);
+                        }
+                      }}
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl transition-all cursor-pointer"
                       style={{
-                        cursor: hasTabs ? "not-allowed" : "pointer",
                         background: selectedId === ws.id ? "rgba(255,255,255,0.1)" : "transparent",
-                        color: hasTabs
-                          ? "rgba(255,255,255,0.3)"
-                          : selectedId === ws.id
-                          ? "white"
-                          : "rgba(255,255,255,0.7)",
+                        color: selectedId === ws.id ? "white" : "rgba(255,255,255,0.7)",
                       }}
                       onMouseEnter={e => {
-                        if (hasTabs || selectedId === ws.id) return;
+                        if (selectedId === ws.id) return;
                         (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.06)";
                       }}
                       onMouseLeave={e => {
@@ -487,22 +478,22 @@ const Sidebar: React.FC<Props> = ({
 
             {/* Footer */}
             <div className="p-3" style={{ borderTop: "0.5px solid rgba(255,255,255,0.07)" }}>
-              <div
+              <button
                 onClick={() => setShowSettings(true)}
-                className="flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors text-left"
                 style={{ color: "rgba(255,255,255,0.45)" }}
                 onMouseEnter={e => {
-                  (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.06)";
-                  (e.currentTarget as HTMLDivElement).style.color = "rgba(255,255,255,0.85)";
+                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.85)";
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLDivElement).style.background = "transparent";
-                  (e.currentTarget as HTMLDivElement).style.color = "rgba(255,255,255,0.45)";
+                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                  (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)";
                 }}
               >
                 <Server className="w-4 h-4 shrink-0" />
                 <span className="text-[13px] font-medium">Configuração</span>
-              </div>
+              </button>
             </div>
           </>
         )}
@@ -527,12 +518,7 @@ const Sidebar: React.FC<Props> = ({
         <div className="space-y-5">
           {/* ── Section: GitHub Sync ── */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Github className="w-4 h-4" style={{ color: "rgba(255,255,255,0.55)" }} />
-              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
-                GitHub Sync
-              </span>
-            </div>
+            <SectionLabel icon={<Github />}>GitHub Sync</SectionLabel>
 
             {authLoading ? (
               <div className="flex items-center justify-center py-6" style={{ color: "rgba(255,255,255,0.3)" }}>
@@ -632,12 +618,7 @@ const Sidebar: React.FC<Props> = ({
 
           {/* ── Section: Vault ── */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Shield className="w-4 h-4" style={{ color: "rgba(255,255,255,0.55)" }} />
-              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
-                Vault
-              </span>
-            </div>
+            <SectionLabel icon={<Shield />}>Vault</SectionLabel>
 
             <div
               className="rounded-2xl p-4"
@@ -650,8 +631,16 @@ const Sidebar: React.FC<Props> = ({
               ) : (
                 <>
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="text-lg">
-                      {vaultConfigured ? (vaultLocked ? "🔒" : "🔓") : "⚠️"}
+                    <span className="shrink-0 flex">
+                      {vaultConfigured ? (
+                        vaultLocked ? (
+                          <Lock className="w-5 h-5" style={{ color: "rgba(255,255,255,0.6)" }} />
+                        ) : (
+                          <LockOpen className="w-5 h-5" style={{ color: "#32d74b" }} />
+                        )
+                      ) : (
+                        <ShieldAlert className="w-5 h-5" style={{ color: "#ff9f0a" }} />
+                      )}
                     </span>
                     <div>
                       <p className="text-sm font-semibold text-white">
@@ -677,12 +666,7 @@ const Sidebar: React.FC<Props> = ({
 
           {/* ── Section: Teclas de Atalho ── */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Keyboard className="w-4 h-4" style={{ color: "rgba(255,255,255,0.55)" }} />
-              <span className="text-[11px] font-medium" style={{ color: "rgba(235,235,245,0.55)" }}>
-                Teclas de Atalho
-              </span>
-            </div>
+            <SectionLabel icon={<Keyboard />}>Teclas de Atalho</SectionLabel>
             <KeybindingsSection
               bindings={bindings}
               onUpdate={onUpdateBinding}

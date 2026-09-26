@@ -15,6 +15,7 @@ import {
   Key,
 } from "lucide-react";
 import { useToast } from "../../hooks/useToast";
+import { Spinner } from "../ui";
 import AddServerModal from "../Servers/AddServerModal";
 import Modal from "../Modal";
 
@@ -197,9 +198,10 @@ const WorkspaceDetail: React.FC<Props> = ({
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div
-            className="flex items-center justify-center py-20 text-sm"
+            className="flex items-center justify-center gap-2 py-20 text-sm"
             style={{ color: "rgba(235,235,245,0.55)" }}
           >
+            <Spinner size="w-5 h-5" />
             Carregando servidores...
           </div>
         ) : (

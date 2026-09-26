@@ -341,7 +341,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
         setFlowState("welcome");
       }
     } catch (err) {
-      if (error) error("Falha ao conectar com o serviço de segurança.");
+      error("Falha ao conectar com o serviço de segurança.");
       setFlowState("welcome");
     }
   };
@@ -353,13 +353,13 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
       await login();
       const hasSyncedVault = await checkSyncedVault();
       if (hasSyncedVault) {
-        if (success) success("Cofre sincronizado encontrado!");
+        success("Cofre sincronizado encontrado!");
         navigateTo("unlock_synced");
       } else {
         navigateTo("setup");
       }
     } catch (err: any) {
-      if (error) error(`Falha no login: ${err}`);
+      error(`Falha no login: ${err}`);
       setFlowState("welcome");
     } finally {
       setSubmitting(false);
@@ -382,7 +382,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setSubmitting(true);
     try {
       await setupVault(password);
-      if (success) success("Vault configurado com sucesso!");
+      success("Vault configurado com sucesso!");
       await checkVaultState();
       window.dispatchEvent(new Event("vault-unlocked"));
     } catch (err: any) {
@@ -399,7 +399,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setSubmitting(true);
     try {
       await unlockVault(password);
-      if (success) success("Vault destrancado com sucesso!");
+      success("Vault destrancado com sucesso!");
       await checkVaultState();
       window.dispatchEvent(new Event("vault-unlocked"));
     } catch (err: any) {
@@ -417,7 +417,7 @@ const VaultGuard: React.FC<VaultGuardProps> = ({ children }) => {
     setSubmitting(true);
     try {
       await importSyncedVault(password);
-      if (success) success("Cofre sincronizado recuperado com sucesso!");
+      success("Cofre sincronizado recuperado com sucesso!");
       await checkVaultState();
       window.dispatchEvent(new Event("vault-unlocked"));
     } catch (err: any) {

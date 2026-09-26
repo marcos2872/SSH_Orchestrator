@@ -44,11 +44,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, width =
         <div
             ref={overlayRef}
             onClick={handleOverlayClick}
-            className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-2xl animate-in fade-in duration-200 p-4"
+            className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-2xl animate-[fadeIn_0.2s_ease-out] p-4"
             style={{ top: 'var(--titlebar-height)' }}
         >
             <div
-                className={`app-modal rounded-3xl ${width} max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200`}
+                className={`app-modal rounded-3xl ${width} max-h-[90vh] flex flex-col animate-[zoomIn_0.2s_ease-out]`}
                 style={{
                     background: 'rgba(28, 28, 30, 0.88)',
                     backdropFilter: 'blur(40px) saturate(180%)',
